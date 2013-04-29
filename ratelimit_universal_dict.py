@@ -5,9 +5,8 @@ from optparse import OptionParser         # for usage
 from os.path import isfile                # for OS file check
 
 ### TODO
-# print format
-# open file
-# usage 
+# usage
+# dict on\off
 
 
 ### Gotta catch 'em all!
@@ -40,6 +39,20 @@ else:
     strptime_loc = lambda date_string, format: datetime(*(strptime(date_string, format)[0:6]))
 
 ### Stop! Function time!
+
+def open_file(filename):
+    if not isfile(filename):
+        print "There is no '%s'. Check me." % filename
+        raise Exception('NO_FILE')    
+    try:
+        return list(open(filename))
+    except IOError as error:
+        print "Can't open file '%s'. Check me." % filename
+        print "I/O error({0}): {1}".format(error.errno, error.strerror)
+        raise Exception('IO_ERROR')
+    except:
+        raise Exception
+
 def search_not_wrapped(list):
     """ Looking through list and look for non wrapped lines """
     match = 0
@@ -49,7 +62,7 @@ def search_not_wrapped(list):
             match += 1
             wrong_lines.append(string + "<br>")
     if match != 0:
-        print "There is non wrapped lines inside " + error_file
+        print "There is non wrapped lines inside %s" % error_file
         for string in wrong_lines:
             print string
         return True
@@ -108,27 +121,20 @@ def check_delta(daemon, list, delta):
                 daemons_dict[daemon] += 1
     return daemons_dict
 
-### Check existence of a file, then copy file into list. 
-if isfile(error_file): 
-    try: error_file_list = list(open(error_file))
-    except IOError as error:
-        print "Can't open file: " + error_file + ". Check me."
-        print error
-        exit(1)
-else:
-    print "There is no " + error_file + ". Check me."
-    exit(3)
 
-### Check existence of a file, then copy file into list. 
-if isfile(dict_file): 
-    try: dict_file_list = list(open(dict_file))
-    except IOError as error:
-        print "Can't open file: " + dict_file + ". Check me."
-        print error
+### Check existence of a file, then copy file into list.
+try:
+   error_file_list = open_file(error_file)
+   dict_file_list  = open_file(dict_file)
+except Exception, err:
+    if 'NO_FILE' in err:
+        exit(3)
+    elif 'IO_ERROR' in err:
         exit(1)
-else:
-    print "There is no " + dict_file + ". Check me."
-    exit(3)
+    else:
+        print "Something bad happend. Check me."
+        print err
+        exit(1)
 
 ### File is empty?
 if len(error_file_list) == 0:
@@ -151,10 +157,9 @@ for daemon in uniq_daemons:
     new_limits = set_limits(dict_file_list, daemon, options.critical, options.warning, options.delta)
 
     if new_limits == None:
-        print "Script logic error in set_limits. Last deamon was:", daemon
+        print "Script logic error in set_limits. Last deamon was: %s" % daemon
         exit(1)
 
-    print daemon, new_limits
     critical   = int(new_limits['crit'])
     warning    = int(new_limits['warn'])
     delta      = int(new_limits['delta'])
