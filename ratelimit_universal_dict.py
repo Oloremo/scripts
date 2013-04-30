@@ -19,7 +19,7 @@ parser.add_option("-s", "--string", dest="regexp", default="restarted with exit 
 
 (options, args) = parser.parse_args()
 if options.warning >= options.critical:
-        parser.error("Warning limit can't be more that Critical limit")
+        parser.error("Configuration error. Warning limit is more that Critical limit.")
 
 ### Assign variables
 error_file = options.error_file
@@ -38,17 +38,16 @@ else:
 
 def open_file(filename):
     if not isfile(filename):
-        print "There is no '%s'. Check me." % filename
+        print "I/O error. There is no '%s'. Check me." % filename
         raise Exception('NO_FILE')
     try:
         return list(open(filename))
     except IOError, error:
-        print "Can't open file '%s'. Check me." % filename
+        print "I/O error. Can't open file '%s'. Check me." % filename
         print "I/O error({0}): {1}".format(error.errno, error.strerror)
         raise Exception('IO_ERROR')
     except:
         raise Exception
-
 def search_not_wrapped(list):
     """ Looking through list and look for non wrapped lines """
     match = 0
@@ -58,7 +57,7 @@ def search_not_wrapped(list):
             match += 1
             wrong_lines.append(string + "<br>")
     if match != 0:
-        print "There is non wrapped lines inside %s" % error_file
+        print "Input error. There is non wrapped lines inside %s" % error_file
         for string in wrong_lines:
             print string
         return True
@@ -130,7 +129,7 @@ except Exception, err:
     elif 'IO_ERROR' in err:
         exit(1)
     else:
-        print "Something bad happend. Check me."
+        print "Fatal error. Something bad happend. Check me."
         print err
         exit(1)
 
@@ -159,12 +158,16 @@ for daemon in uniq_daemons:
         limits = {'crit': options.critical, 'warn': options.warning, 'delta': options.delta}
 
     if limits is None:
-        print "Script logic error in set_limits. Last deamon was: %s" % daemon
+        print "Logic error. Inside set_limits function. Last deamon was: %s" % daemon
         exit(1)
 
     critical = int(limits['crit'])
     warning = int(limits['warn'])
     delta = int(limits['delta'])
+
+    if warning >= critical:
+        print "Configuration error. Warning limit is more that Critical limit.<br>Your input: %s > %s for %s" % (warning, critical, daemon)
+        exit(2)
 
     ### Filling daemons_dict with "daemon_name : restart_count" pairs
     daemons_dict = check_delta(daemon, error_file_list, delta)
