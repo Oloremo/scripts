@@ -4,15 +4,11 @@ from time import strptime                 # for time convertation
 from optparse import OptionParser         # for usage
 from os.path import isfile                # for OS file check
 
-### TODO
-# usage
-# dict on\off
-
-
 ### Gotta catch 'em all!
-usage = "usage: %prog [-f /path/to/file] [-l /path/to/limits] [-c critical_limit] [-w warning_limit] [-d delta_in_minutes]"
+usage = "usage: %prog [-f /path/to/file] [--dict] [-l /path/to/dict] [-c critical_limit] [-w warning_limit] [-d delta_in_minutes]"
 parser = OptionParser(usage=usage)
 parser.add_option("-f", "--file", dest="error_file", default="/var/tmp/error.txt", help="Path to file to check. Default: /var/tmp/error.txt")
+parser.add_option("--dict", action="store_true", dest="use_dict", default=False, help="Turn on custom limits. Boolean. Default: False")
 parser.add_option("-l", "--limits", dest="dict_file", default="/etc/snmp/bin/ratelimit_dict.txt", help="Path to file to file with custom limits. Default: /etc/snmp/bin/ratelimit_dict.txt")
 parser.add_option("-c", "--crit", type="int", dest="critical", default=5, help="Critical limit. Default: 5")
 parser.add_option("-w", "--warn", type="int", dest="warning", default=3, help="Warning limit. Default: 3")
@@ -25,10 +21,8 @@ if options.warning >= options.critical:
 
 ### Assign variables
 error_file = options.error_file
-dict_file  = options.dict_file
-error_file = "ratelimit_error.txt" # delme
-dict_file  = "daemon_dict.txt" # delme
-regexp     = options.regexp
+dict_file = options.dict_file
+regexp = options.regexp
 
 ### Because of python 2.4 didn't have datetime.strptime we use this shit
 if hasattr(datetime, 'strptime'):
@@ -43,7 +37,7 @@ else:
 def open_file(filename):
     if not isfile(filename):
         print "There is no '%s'. Check me." % filename
-        raise Exception('NO_FILE')    
+        raise Exception('NO_FILE')
     try:
         return list(open(filename))
     except IOError as error:
@@ -68,7 +62,7 @@ def search_not_wrapped(list):
         return True
     else:
         return False
-        
+
 def get_uniq_daemons(list):
     """ Sorting all demons and return list of uniq daemons """
     uniq_daemons = []
@@ -92,23 +86,23 @@ def print_list(list):
         print string
 
 def set_limits(list, daemon, def_critical, def_warning, def_delta):
-    daemon =  daemon.rstrip('0123456789. ')
+    daemon = daemon.rstrip('0123456789. ')
     for line in list:
         if not line.lstrip().startswith('#'):
             if daemon in line:
                 line = line.split()
-                limits = {'crit' : line[1], 'warn' : line[2], 'delta' : line[3]}
+                limits = {'crit': line[1], 'warn': line[2], 'delta': line[3]}
                 for key, value in limits.iteritems():
                     if value == "0":
                         if key == 'crit':
                             limits[key] = def_critical
                         elif key == 'warn':
-                             limits[key] = def_warning
+                            limits[key] = def_warning
                         elif key == 'delta':
-                             limits[key] = def_delta
+                            limits[key] = def_delta
                 return limits
-            #break
-    limits = {'crit' : def_critical, 'warn' : def_warning, 'delta' : def_delta}
+            #break ## TODO
+    limits = {'crit': def_critical, 'warn': def_warning, 'delta': def_delta}
     return limits
 
 def check_delta(daemon, list, delta):
@@ -124,8 +118,9 @@ def check_delta(daemon, list, delta):
 
 ### Check existence of a file, then copy file into list.
 try:
-   error_file_list = open_file(error_file)
-   dict_file_list  = open_file(dict_file)
+    error_file_list = open_file(error_file)
+    if options.use_dict:
+        dict_file_list = open_file(dict_file)
 except Exception, err:
     if 'NO_FILE' in err:
         exit(3)
@@ -147,22 +142,26 @@ if search_not_wrapped(error_file_list):
 ### Creating list of uniq daemons
 uniq_daemons = get_uniq_daemons(error_file_list)
 
-### Creating three lists for each type of alert and fill it with alert strings 
+### Creating three lists for each type of alert and fill it with alert strings
 result_critical = []
-result_warning  = []
-result_info     = []
-daemons_dict    = {}
+result_warning = []
+result_info = []
+daemons_dict = {}
+
 for daemon in uniq_daemons:
 
-    new_limits = set_limits(dict_file_list, daemon, options.critical, options.warning, options.delta)
+    if options.use_dict:
+        limits = set_limits(dict_file_list, daemon, options.critical, options.warning, options.delta)
+    else:
+        limits = {'crit': options.critical, 'warn': options.warning, 'delta': options.delta}
 
-    if new_limits == None:
+    if limits is None:
         print "Script logic error in set_limits. Last deamon was: %s" % daemon
         exit(1)
 
-    critical   = int(new_limits['crit'])
-    warning    = int(new_limits['warn'])
-    delta      = int(new_limits['delta'])
+    critical = int(limits['crit'])
+    warning = int(limits['warn'])
+    delta = int(limits['delta'])
 
     ### Filling daemons_dict with "daemon_name : restart_count" pairs
     daemons_dict = check_delta(daemon, error_file_list, delta)
@@ -172,14 +171,14 @@ for daemon in uniq_daemons:
         exit(0)
 
     ### Restart count checked against limits.
-    if daemons_dict[daemon]   >= critical:
-        result_critical.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.") 
+    if daemons_dict[daemon] >= critical:
+        result_critical.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.")
     elif daemons_dict[daemon] >= warning and daemons_dict[daemon] < critical:
-        result_warning.append( daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.") 
-    elif daemons_dict[daemon]  < warning and daemons_dict[daemon] > 0:
-        result_info.append(    daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.") 
+        result_warning.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.")
+    elif daemons_dict[daemon] < warning and daemons_dict[daemon] > 0:
+        result_info.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.")
 
-### Depending on situation it prints revelant list filled with alert strings 
+### Depending on situation it prints revelant list filled with alert strings
 if len(result_critical) != 0 and len(result_warning) != 0:
     print_list(result_critical)
     print_list(result_warning)
