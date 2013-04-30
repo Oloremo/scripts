@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from sys import exit                      # for exit codes
 from datetime import datetime, timedelta  # for getting a date
 from time import strptime                 # for time convertation
@@ -40,7 +42,7 @@ def open_file(filename):
         raise Exception('NO_FILE')
     try:
         return list(open(filename))
-    except IOError as error:
+    except IOError, error:
         print "Can't open file '%s'. Check me." % filename
         print "I/O error({0}): {1}".format(error.errno, error.strerror)
         raise Exception('IO_ERROR')
@@ -52,7 +54,7 @@ def search_not_wrapped(list):
     match = 0
     wrong_lines = []
     for string in list:
-        if not regexp in string:
+        if string.strip() and not regexp in string:
             match += 1
             wrong_lines.append(string + "<br>")
     if match != 0:
@@ -67,8 +69,9 @@ def get_uniq_daemons(list):
     """ Sorting all demons and return list of uniq daemons """
     uniq_daemons = []
     for string in list:
-        words = string.split()
-        uniq_daemons.append(words[2])
+        if string.strip():
+            words = string.split()
+            uniq_daemons.append(words[2])
     return sorted(set(uniq_daemons))
 
 def compare_timestamp(timestamp, delta):
@@ -192,3 +195,4 @@ elif len(result_warning) != 0:
 elif len(result_info) != 0:
     print_list(result_info)
     exit(3)
+
