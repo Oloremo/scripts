@@ -9,13 +9,20 @@ from os.path import isfile                # for OS file check
 ### Gotta catch 'em all!
 usage = "usage: %prog [-f /path/to/file] [--dict] [-l /path/to/dict] [-c critical_limit] [-w warning_limit] [-d delta_in_minutes]"
 parser = OptionParser(usage=usage)
-parser.add_option("-f", "--file", dest="error_file", default="/var/tmp/error.txt", help="Path to file to check. Default: /var/tmp/error.txt")
-parser.add_option("--dict", action="store_true", dest="use_dict", default=False, help="Turn on custom limits. Boolean. Default: False")
-parser.add_option("-l", "--limits", dest="dict_file", default="/etc/snmp/bin/ratelimit_dict.txt", help="Path to file to file with custom limits. Default: /etc/snmp/bin/ratelimit_dict.txt")
-parser.add_option("-c", "--crit", type="int", dest="critical", default=5, help="Critical limit. Default: 5")
-parser.add_option("-w", "--warn", type="int", dest="warning", default=3, help="Warning limit. Default: 3")
-parser.add_option("-d", "--delta", type="int", dest="delta", default=60, help="Delta in minutes. Default: 60")
-parser.add_option("-s", "--string", dest="regexp", default="restarted with exit code", help="May be we'll need to change it someday...")
+parser.add_option("-f", "--file", dest="error_file", default="/var/tmp/error.txt",
+                  help="Path to file to check. Default: /var/tmp/error.txt")
+parser.add_option("--dict", action="store_true", dest="use_dict", default=False,
+                  help="Turn on custom limits. Boolean. Default: False")
+parser.add_option("-l", "--limits", dest="dict_file", default="/etc/snmp/bin/ratelimit_dict.txt",
+                  help="Path to file to file with custom limits. Default: /etc/snmp/bin/ratelimit_dict.txt")
+parser.add_option("-c", "--crit", type="int", dest="critical", default=5,
+                  help="Critical limit. Default: 5")
+parser.add_option("-w", "--warn", type="int", dest="warning", default=3,
+                  help="Warning limit. Default: 3")
+parser.add_option("-d", "--delta", type="int", dest="delta", default=60,
+                  help="Delta in minutes. Default: 60")
+parser.add_option("-s", "--string", dest="regexp", default="restarted with exit code",
+                  help="May be we'll need to change it someday...")
 
 (options, args) = parser.parse_args()
 if options.warning >= options.critical:
