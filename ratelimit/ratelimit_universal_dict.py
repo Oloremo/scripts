@@ -28,7 +28,7 @@ parser.add_option("-s", "--string", dest="regexp", default="restarted with exit 
 if options.warning >= options.critical:
         parser.error("Configuration error. Warning limit is more that Critical limit.")
 
-### Assign variables
+### Assign global variables
 error_file = options.error_file
 dict_file = options.dict_file
 regexp = options.regexp
@@ -44,6 +44,7 @@ else:
 ### Stop! Function time!
 
 def open_file(filename):
+    """ We try to open file and copy it into list. """
     if not isfile(filename):
         print "I/O error. There is no '%s'. Check me." % filename
         raise Exception('NO_FILE')
@@ -55,6 +56,7 @@ def open_file(filename):
         raise Exception('IO_ERROR')
     except:
         raise Exception
+
 def search_not_wrapped(list):
     """ Looking through list and look for non wrapped lines """
     match = 0
@@ -81,10 +83,10 @@ def get_uniq_daemons(list):
     return sorted(set(uniq_daemons))
 
 def compare_timestamp(timestamp, delta):
-    """ Subtract daemon crush timestamp from current time and compare result with delta """
+    """ Subtract daemons crush timestamp from current time and compare result with delta """
     date_now = datetime.now()
-    timestamp = strptime_loc(timestamp,"%Y.%m.%d-%H.%M")
-    if date_now - timestamp <= timedelta (minutes = delta):
+    timestamp = strptime_loc(timestamp, "%Y.%m.%d-%H.%M")
+    if date_now - timestamp <= timedelta(minutes=delta):
         return True
     else:
         return False
@@ -95,6 +97,8 @@ def print_list(list):
         print string
 
 def set_limits(list, daemon, def_critical, def_warning, def_delta):
+    """ We check daemons name againt dictonary and set limits acording to it """
+    ### We don't care about instances here so we strip all digits, dots and whitespaces
     daemon = daemon.rstrip('0123456789. ')
     for line in list:
         if not line.lstrip().startswith('#'):
@@ -110,7 +114,7 @@ def set_limits(list, daemon, def_critical, def_warning, def_delta):
                         elif key == 'delta':
                             limits[key] = def_delta
                 return limits
-            #break ## TODO
+    ### If we didn't find daemon in dictonary, we return default limits
     limits = {'crit': def_critical, 'warn': def_warning, 'delta': def_delta}
     return limits
 
@@ -123,7 +127,6 @@ def check_delta(daemon, list, delta):
             if compare_timestamp(timestamp, delta):
                 daemons_dict[daemon] += 1
     return daemons_dict
-
 
 ### Check existence of a file, then copy file into list.
 try:
@@ -164,7 +167,8 @@ for daemon in uniq_daemons:
     else:
         limits = {'crit': options.critical, 'warn': options.warning, 'delta': options.delta}
 
-    if limits is None:
+    ### If there is nothing inside limits, we can't go on.
+    if limits is None or len(limits) == 0:
         print "Logic error. Inside set_limits function. Last deamon was: %s" % daemon
         exit(1)
 
@@ -205,4 +209,3 @@ elif len(result_warning) != 0:
 elif len(result_info) != 0:
     print_list(result_info)
     exit(3)
-
