@@ -12,9 +12,9 @@ parser = OptionParser(usage=usage)
 parser.add_option("-f", "--file", dest="error_file", default="/var/tmp/error.txt",
                   help="Path to file to check. Default: /var/tmp/error.txt")
 parser.add_option("--dict", action="store_true", dest="use_dict", default=False,
-                  help="Turn on custom limits. Boolean. Default: False")
-parser.add_option("-l", "--limits", dest="dict_file", default="/etc/snmp/bin/ratelimit_dict.txt",
-                  help="Path to file to file with custom limits. Default: /etc/snmp/bin/ratelimit_dict.txt")
+                  help="Turn on custom limits taken fron onlineconf. Boolean. Default: False")
+parser.add_option("-l", "--limits", dest="dict_file", default="/usr/local/etc/onlineconf/monitoring.conf",
+                  help="Path to file to file with custom limits. Default: /usr/local/etc/onlineconf/monitoring.conf")
 parser.add_option("-c", "--crit", type="int", dest="critical", default=5,
                   help="Critical limit. Default: 5")
 parser.add_option("-w", "--warn", type="int", dest="warning", default=3,
@@ -101,10 +101,13 @@ def set_limits(list, daemon, def_critical, def_warning, def_delta):
     ### We don't care about instances here so we strip all digits, dots and whitespaces
     daemon = daemon.rstrip('0123456789. ')
     for line in list:
-        if not line.lstrip().startswith('#'):
+        if line.startswith('daemons-restart'):
             if daemon in line:
+                ### Split to name[0] and limits[1]
                 line = line.split()
-                limits = {'crit': line[1], 'warn': line[2], 'delta': line[3]}
+                ### Split limits[1] into 3 limits
+                line = line[1].split(',')
+                limits = {'crit': line[0], 'warn': line[1], 'delta': line[2]}
                 for key, value in limits.iteritems():
                     if value == "0":
                         if key == 'crit':
@@ -176,7 +179,7 @@ for daemon in uniq_daemons:
     warning = int(limits['warn'])
     delta = int(limits['delta'])
 
-    if warning >= critical:
+    if warning > critical:
         print "Configuration error. Warning limit is more that Critical limit.<br>Your input: %s > %s for %s" % (warning, critical, daemon)
         exit(2)
 
