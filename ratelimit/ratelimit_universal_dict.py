@@ -26,7 +26,7 @@ parser.add_option("-s", "--string", dest="regexp", default="restarted with exit 
 
 (options, args) = parser.parse_args()
 if options.warning >= options.critical:
-        parser.error("Configuration error. Warning limit is more that Critical limit.")
+        parser.error("Configuration error. Warning limit is more than Critical limit.")
 
 ### Assign global variables
 error_file = options.error_file
@@ -59,17 +59,20 @@ def open_file(filename):
 
 def search_not_wrapped(list):
     """ Looking through list and look for non wrapped lines """
-    match = 0
     wrong_lines = []
     for string in list:
         if string.strip() and not regexp in string:
-            match += 1
-            wrong_lines.append(string + "<br>")
-    if match != 0:
-        print "Input error. There is non wrapped lines inside %s" % error_file
-        for string in wrong_lines:
-            print string
-        return True
+            wrong_lines.append(string)
+    if len(wrong_lines) != 0:
+        print "Input error. There is %s non wrapped lines inside %s" % (len(wrong_lines), error_file)
+        if len(wrong_lines) <= 10:
+            print_list(wrong_lines)
+            return True
+        else:
+            print 'This is first 10:'
+            for num in range(10):
+                print wrong_lines[num]
+            return True
     else:
         return False
 
@@ -98,6 +101,7 @@ def print_list(list):
 
 def set_limits(list, daemon, def_critical, def_warning, def_delta):
     """ We check daemons name againt dictonary and set limits acording to it """
+
     ### We don't care about instances here so we strip all digits, dots and whitespaces
     daemon = daemon.rstrip('0123456789. ')
     for line in list:
@@ -180,7 +184,7 @@ for daemon in uniq_daemons:
     delta = int(limits['delta'])
 
     if warning > critical:
-        print "Configuration error. Warning limit is more that Critical limit.<br>Your input: %s > %s for %s" % (warning, critical, daemon)
+        print "Configuration error. Warning limit is more that Critical limit.\nYour input: %s > %s for %s" % (warning, critical, daemon)
         exit(2)
 
     ### Filling daemons_dict with "daemon_name : restart_count" pairs
