@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from sys import exit                      # for exit codes
+from sys import exit, stdout              # for exit codes
 from datetime import datetime, timedelta  # for getting a date
 from time import strptime                 # for time convertation
 from optparse import OptionParser         # for usage
@@ -37,22 +37,30 @@ regexp = options.regexp
 if hasattr(datetime, 'strptime'):
     ### Python 2.6+
     strptime_loc = datetime.strptime
+    isEL6 = True
 else:
     ### Python 2.4 equivalent
     strptime_loc = lambda date_string, format: datetime(*(strptime(date_string, format)[0:6]))
 
 ### Stop! Function time!
 
+def output(line):
+    if isEL6:
+        stdout.write(line + "<br>")
+        stdout.flush()
+    else:
+        print line
+
 def open_file(filename):
     """ We try to open file and copy it into list. """
     if not isfile(filename):
-        print "I/O error. There is no '%s'. Check me." % filename
+        output("I/O error. There is no '%s'. Check me." % filename)
         raise Exception('NO_FILE')
     try:
         return list(open(filename))
     except IOError, error:
-        print "I/O error. Can't open file '%s'. Check me." % filename
-        print "I/O error({0}): {1}".format(error.errno, error.strerror)
+        output("I/O error. Can't open file '%s'. Check me." % filename)
+        output("I/O error({0}): {1}".format(error.errno, error.strerror))
         raise Exception('IO_ERROR')
     except:
         raise Exception
@@ -64,14 +72,14 @@ def search_not_wrapped(list):
         if string.strip() and not regexp in string:
             wrong_lines.append(string)
     if len(wrong_lines) != 0:
-        print "Input error. There is %s non wrapped lines inside %s" % (len(wrong_lines), error_file)
+        output("Input error. There is %s non wrapped lines inside %s" % (len(wrong_lines), error_file))
         if len(wrong_lines) <= 10:
             print_list(wrong_lines)
             return True
         else:
-            print 'This is first 10:'
+            output("This is first 10:")
             for num in range(10):
-                print wrong_lines[num]
+                output(wrong_lines[num])
             return True
     else:
         return False
@@ -97,7 +105,7 @@ def compare_timestamp(timestamp, delta):
 def print_list(list):
     """ Eh... well... it's printing the list... string by string... """
     for string in list:
-        print string
+        output(string)
 
 def set_limits(list, daemon, def_critical, def_warning, def_delta):
     """ We check daemons name againt dictonary and set limits acording to it """
@@ -146,8 +154,8 @@ except Exception, err:
     elif 'IO_ERROR' in err:
         exit(1)
     else:
-        print "Fatal error. Something bad happend. Check me."
-        print err
+        output("Fatal error. Something bad happend. Check me.")
+        print err  ### FIXME
         exit(1)
 
 ### File is empty?
@@ -176,7 +184,7 @@ for daemon in uniq_daemons:
 
     ### If there is nothing inside limits, we can't go on.
     if limits is None or len(limits) == 0:
-        print "Logic error. Inside set_limits function. Last deamon was: %s" % daemon
+        output("Logic error. Inside set_limits function. Last deamon was: %s" % daemon)
         exit(1)
 
     critical = int(limits['crit'])
@@ -184,7 +192,7 @@ for daemon in uniq_daemons:
     delta = int(limits['delta'])
 
     if warning > critical:
-        print "Configuration error. Warning limit is more that Critical limit.\nYour input: %s > %s for %s" % (warning, critical, daemon)
+        output("Configuration error. Warning limit is more that Critical limit.\nYour input: %s > %s for %s" % (warning, critical, daemon))
         exit(2)
 
     ### Filling daemons_dict with "daemon_name : restart_count" pairs
