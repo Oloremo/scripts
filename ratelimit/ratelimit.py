@@ -77,9 +77,7 @@ def search_not_wrapped(list):
             print_list(wrong_lines)
             return True
         else:
-            output("This is first 10:")
-            for num in range(10):
-                output(wrong_lines[num])
+            print_list(wrong_lines,endnum=10)
             return True
     else:
         return False
@@ -102,10 +100,19 @@ def compare_timestamp(timestamp, delta):
     else:
         return False
 
-def print_list(list):
+def print_list(list, endnum=0):
     """ Eh... well... it's printing the list... string by string... """
-    for string in list:
-        output(string)
+    if endnum != 0:
+        output("This is first %s:" % endnum)
+        for num in range(endnum):
+            string = list[num]
+            string = string.rstrip('\n')
+            output(string)
+    else:
+        for string in list:
+            string = string.rstrip('\n')
+            output(string)
+
 
 def set_limits(list, daemon, def_critical, def_warning, def_delta):
     """ We check daemons name againt dictonary and set limits acording to it """
