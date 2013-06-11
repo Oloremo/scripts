@@ -40,6 +40,7 @@ if hasattr(datetime, 'strptime'):
     isEL6 = True
 else:
     ### Python 2.4 equivalent
+    isEL6 = False
     strptime_loc = lambda date_string, format: datetime(*(strptime(date_string, format)[0:6]))
 
 ### Stop! Function time!
