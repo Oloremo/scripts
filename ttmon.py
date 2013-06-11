@@ -14,8 +14,8 @@ from os.path import isfile                # for OS file check
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
 
 parser = OptionParser(usage=usage)
-parser.add_option('-t', '--type', type='choice', action='store', dest='type', choices=['slab', 'repl', 'infr'],
-                 help='Check type. Chose from "slab", "repl", "infr"')
+parser.add_option('-t', '--type', type='choice', action='store', dest='type', choices=['slab', 'repl', 'infr_cvp' , 'infr_pvc', 'infr_ivc'],
+                 help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc"')
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-c", dest="crit_limit", type="int", help="Critical limit. Defaults: slab = 90. repl = 10")
@@ -210,17 +210,20 @@ def check_init_vs_chk(init_list, chkcfg_list):
                 if not filter(p.search, chkcfg_list):
                         yield 'Init script "%s" is not added to chkconfig!' % init
 
-def check_infrastructure(exit_code):
+def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=False):
         errors_list = []
 
-        for alert in check_cfg_vs_proc(cfg_dict):
-                errors_list.append(alert)
+        if infr_cvp:
+            for alert in check_cfg_vs_proc(cfg_dict):
+                    errors_list.append(alert)
 
-        for alert in check_proc_vs_cfg(proc_dict, cfg_dict):
-                errors_list.append(alert)
+        if infr_pvc:
+            for alert in check_proc_vs_cfg(proc_dict, cfg_dict):
+                    errors_list.append(alert)
 
-        for alert in check_init_vs_chk(init_list, chkcfg_list):
-                errors_list.append(alert)
+        if infr_ivc:
+            for alert in check_init_vs_chk(init_list, chkcfg_list):
+                    errors_list.append(alert)
 
         if len(errors_list) != 0:
                 print_list(errors_list)
@@ -284,18 +287,34 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
 #chkcfg_list = make_chkcfg_list()
 
 ### Do the work
-if opts.type == 'infr':
+if opts.type == 'infr_cvp':
         ### Make stuff
         tt_proc_list = make_tt_proc_list(proc_pattern)
         adm_port_list = make_adm_port_list(tt_proc_list)
         cfg_list = make_paths_list(cfg_paths_list)
-        init_list = make_paths_list(init_paths_list, basename=True)
-        chkcfg_list = make_chkcfg_list()
+        cfg_dict = make_cfg_dict(cfg_list)
+
+        ### Check stuff
+        check_infrastructure(opts.exit_code, infr_cvp=True)
+
+if opts.type == 'infr_pvc':
+        ### Make stuff
+        tt_proc_list = make_tt_proc_list(proc_pattern)
+        adm_port_list = make_adm_port_list(tt_proc_list)
+        cfg_list = make_paths_list(cfg_paths_list)
         cfg_dict = make_cfg_dict(cfg_list)
         proc_dict = make_proc_dict(adm_port_list)
 
         ### Check stuff
-        check_infrastructure(opts.exit_code)
+        check_infrastructure(opts.exit_code, infr_pvc=True)
+
+if opts.type == 'infr_ivc':
+        ### Make stuff
+        init_list = make_paths_list(init_paths_list, basename=True)
+        chkcfg_list = make_chkcfg_list()
+
+        ### Check stuff
+        check_infrastructure(opts.exit_code, infr_ivc=True)
 
 if opts.type == 'slab':
         ### Make stuff
