@@ -21,6 +21,8 @@ parser.add_option("-w", "--warn", type="int", dest="warning", default=3,
                   help="Warning limit. Default: 3")
 parser.add_option("-d", "--delta", type="int", dest="delta", default=60,
                   help="Delta in minutes. Default: 60")
+parser.add_option("-a", "--action", dest="action", default="restarted",
+                  help="Describe what happend on ratelimit event. Default: restarted")
 parser.add_option("-s", "--string", dest="regexp", default="restarted with exit code",
                   help="May be we'll need to change it someday...")
 
@@ -32,6 +34,7 @@ if options.warning >= options.critical:
 error_file = options.error_file
 dict_file = options.dict_file
 regexp = options.regexp
+action = options.action
 
 ### Because of python 2.4 didn't have datetime.strptime we use this shit
 if hasattr(datetime, 'strptime'):
@@ -212,11 +215,11 @@ for daemon in uniq_daemons:
 
     ### Restart count checked against limits.
     if daemons_dict[daemon] >= critical:
-        result_critical.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.")
+        result_critical.append("%s %s %s times in %s minutes" % (daemon, action, str(daemons_dict[daemon]), str(delta)))
     elif daemons_dict[daemon] >= warning and daemons_dict[daemon] < critical:
-        result_warning.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.")
+        result_warning.append("%s %s %s times in %s minutes" % (daemon, action, str(daemons_dict[daemon]), str(delta)))
     elif daemons_dict[daemon] < warning and daemons_dict[daemon] > 0:
-        result_info.append(daemon + " restarted " + str(daemons_dict[daemon]) + " times in " + str(delta) + " minutes.")
+        result_info.append("%s %s %s times in %s minutes" % (daemon, action, str(daemons_dict[daemon]), str(delta)))
 
 ### Depending on situation it prints revelant list filled with alert strings
 if len(result_critical) != 0 and len(result_warning) != 0:
