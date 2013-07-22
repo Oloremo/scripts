@@ -138,15 +138,12 @@ def make_cfg_dict(cfg_list):
                     print err
                     exit(1)
 
+            cfg_dict_loc[cfg_file] = {'pport': '', 'aport': ''}
             for string in file_list:
-                    if 'primary_port' in string:
-                            string = string.split()
-                            pport = string[2]
-                    elif 'admin_port' in string:
-                            string = string.split()
-                            aport = string[2]
-
-            cfg_dict_loc[cfg_file] = {'pport': pport, 'aport': aport}
+                if 'primary_port' in string:
+                    cfg_dict_loc[cfg_file]['pport'] = string.split()[2]
+                elif 'admin_port' in string:
+                    cfg_dict_loc[cfg_file]['aport'] = string.split()[2]
 
     return cfg_dict_loc
 
