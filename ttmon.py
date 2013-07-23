@@ -181,7 +181,7 @@ def make_proc_dict(adm_port_list, host='localhost'):
             'items_used': lambda x: int(x.rsplit('.')[0]),
             'arena_used': lambda x: int(x.rsplit('.')[0]),
             'recovery_lag': lambda x: int(x.rsplit('.')[0]),
-            'config': lambda x: int(x.strip(' "')),
+            'config': lambda x: x.strip(' "'),
         }
 
         for key in set(args_dict.keys()) & set(filters.keys()):
