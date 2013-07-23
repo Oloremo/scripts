@@ -47,7 +47,7 @@ elif opts.type == 'repl':
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg']
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
-sock_timeout = 1.0
+sock_timeout = 0.1
 
 ### Functions
 def open_file(filename):
@@ -89,37 +89,46 @@ def open_socket(sock, timeout, host, port):
         exit(1)
     return False
 
-def read_socket(sock, recv_buffer=4096):
-    """ Nice way to read from socket. We use select() for timeout handling """
+def read_socket(sock, timeout=1, recv_buffer=4096):
+    """ Nice way to read from socket. We use select() for timeout and recv handling """
 
     buffer = ''
     receiving = True
     while receiving:
-            ready = select([sock], [], [], 1)
+            ready = select([sock], [], [], timeout)
             if ready[0]:
                     data = sock.recv(recv_buffer)
                     buffer += data
 
-        ### Have we reached end of data?
+                    ### Have we reached end of data?
                     for line in buffer.splitlines():
-                            if 'config:' in line:
+                            if '---' in line:
                                     receiving = False
+            else:
+                    buffer = 'check_error: Timeout after %s second' % timeout
+                    receiving = False
+
     for line in buffer.splitlines():
             yield line
 
-def get_stats(sock, command, *arg):
+def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
     """ Parsing internal tt\octopus info from admin port """
 
-    result_list = []
-    sock.sendall(command)
+    args_dict = {}
+    for my_arg in arg:
+        args_dict[my_arg] = ''
+    args_dict['recovery_lag'] = 0
 
-    for line in read_socket(sock):
+    for command in commands:
+        sock.sendall(command)
+
+        for line in read_socket(sock, timeout):
             for my_arg in arg:
-                    if my_arg in line:
-                            line = line.split()
-                            my_arg = line[1]
-                            result_list.append(my_arg)
-    return result_list
+                if my_arg in line:
+                    args_dict[my_arg] = line.split(':', -1)[1]
+
+    sock.sendall('quit\n')
+    return args_dict
 
 def make_cfg_dict(cfg_list):
     """ Making dict from tt\octopus cfg's """
@@ -155,18 +164,32 @@ def make_proc_dict(adm_port_list, host='localhost'):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             open_socket(sock, sock_timeout, host, aport)
-            items_used, arena_used, rep_lag, config = get_stats(sock, 'show slab\nshow info\n', 'items_used', 'arena_used', 'recovery_lag', 'config')
-            items_used, arena_used, rep_lag, config = int(items_used.rsplit('.')[0]), int(arena_used.rsplit('.')[0]), int(float(rep_lag)), config.strip('"')
-            adm_dict_loc[config] = {'aport': aport, 'items_used': items_used, 'arena_used': arena_used, 'rep_lag': rep_lag, 'error': ''}
         except Exception, err:
             if 'TO_ERROR' in err:
-                adm_dict_loc[aport] = {'aport': aport, 'error': "Timeout after %s second" % sock_timeout}
+                adm_dict_loc[aport] = {'aport': aport, 'check_error': "Timeout after %s second" % sock_timeout}
             elif 'ECONNREFUSED' in err:
-                adm_dict_loc[aport] = {'aport': aport, 'error': "Connection refused"}
+                adm_dict_loc[aport] = {'aport': aport, 'check_error': "Connection refused"}
             else:
                 print err
                 exit(1)
+
+        args_dict = get_stats(sock, ['show slab\n', 'show info\n'], ['items_used', 'arena_used', 'recovery_lag', 'config', 'check_error'], sock_timeout)
+        args_dict['aport'] = aport
         sock.close()
+
+        filters = {
+            'items_used': lambda x: int(x.rsplit('.')[0]),
+            'arena_used': lambda x: int(x.rsplit('.')[0]),
+            'recovery_lag': lambda x: int(x.rsplit('.')[0]),
+            'config': lambda x: int(x.strip('"')),
+        }
+
+        for key in set(args_dict.keys()) & set(filters.keys()):
+            if args_dict[key] != '' and args_dict[key] != 0:
+                args_dict[key] = filters[key](args_dict[key])
+
+        adm_dict_loc[aport] = args_dict
+
     return adm_dict_loc
 
 def make_paths_list(paths, basename=False):
@@ -228,7 +251,7 @@ def print_alert(check_item, size, limit, aport, error):
     if error != '':
         return 'Octopus/Tarantool with admin port %s runs on error: %s' % (aport, error)
     else:
-        return 'Octopus/Tarantool with admin port %s. "%s" is more than %d - %d' % (aport, check_item, limit, size)
+        return 'Octopus/Tarantool with admin port %s. "%s" is more than %s - %s' % (aport, check_item, limit, size)
 
 def print_list(list):
     """ Eh... well... it's printing the list... string by string... """
@@ -247,9 +270,9 @@ def check_cfg_vs_proc(cfg_dict):
 def check_proc_vs_cfg(proc_dict, cfg_dict):
     """ Check proccess vs configs """
 
-    for proc_cfg in proc_dict.iterkeys():
-            if not proc_cfg in cfg_dict.keys():
-                    yield "Octopus/Tarantool with admin port %s is running without config!" % proc_dict[proc_cfg]['aport']
+    for proc in proc_dict.itervalues():
+            if not proc['config'] in cfg_dict.keys():
+                    yield "Octopus/Tarantool with admin port %s is running without config!" % proc['aport']
 
 def check_init_vs_chk(init_list, chkcfg_list):
     """ Check init scripts vs chkconfig """
@@ -292,15 +315,20 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
 
     for proc in proc_dict.keys():
         aport = proc_dict[proc]['aport']
-        error = proc_dict[proc]['error']
+        error = proc_dict[proc]['check_error']
         if error != '':
             result_critical.append(print_alert('', '', '', aport, error))
-            break
+            continue
         items_used = proc_dict[proc]['items_used']
         arena_used = proc_dict[proc]['arena_used']
-        rep_lag = proc_dict[proc]['rep_lag']
+        rep_lag = proc_dict[proc]['recovery_lag']
 
         if check_repl:
+
+                if rep_lag == '':
+                    result_critical.append(print_alert('', '', '', aport, "Can't get replication lag info. Check me."))
+                    continue
+
                 if rep_lag >= crit:
                         result_critical.append(print_alert('replication_lag', rep_lag, crit, aport, error))
                 elif rep_lag >= warn:
