@@ -271,8 +271,11 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
     """ Check proccess vs configs """
 
     for proc in proc_dict.itervalues():
-            if not proc['config'] in cfg_dict.keys():
+            if proc['config'] != '':
+                if not proc['config'] in cfg_dict.keys():
                     yield "Octopus/Tarantool with admin port %s is running without config!" % proc['aport']
+            else:
+                yield "Octopus/Tarantool with admin port %s runs on error: Can't get config from process." % proc['aport']
 
 def check_init_vs_chk(init_list, chkcfg_list):
     """ Check init scripts vs chkconfig """
