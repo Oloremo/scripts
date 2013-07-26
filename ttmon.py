@@ -102,7 +102,7 @@ def read_socket(sock, timeout=1, recv_buffer=4096):
 
                     ### Have we reached end of data?
                     for line in buffer.splitlines():
-                            if '---' in line:
+                            if '---' in line or '...' in line:
                                     receiving = False
             else:
                     buffer = 'check_error: Timeout after %s second' % timeout
@@ -124,7 +124,7 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
 
         for line in read_socket(sock, timeout):
             for my_arg in arg:
-                if my_arg in line:
+                if my_arg + ':' in line:
                     args_dict[my_arg] = line.split(':', -1)[1]
 
     sock.sendall('quit\n')
@@ -147,12 +147,13 @@ def make_cfg_dict(cfg_list):
                     print err
                     exit(1)
 
-            cfg_dict_loc[cfg_file] = {'pport': '', 'aport': ''}
+            cfg_dict_loc[cfg_file] = {'primary_port': '', 'aport': '', 'config': ''}
             for string in file_list:
                 if 'primary_port' in string:
-                    cfg_dict_loc[cfg_file]['pport'] = string.split()[2]
+                    cfg_dict_loc[cfg_file]['primary_port'] = string.split()[2]
                 elif 'admin_port' in string:
                     cfg_dict_loc[cfg_file]['aport'] = string.split()[2]
+                cfg_dict_loc[cfg_file]['config'] = cfg_file
 
     return cfg_dict_loc
 
@@ -173,7 +174,7 @@ def make_proc_dict(adm_port_list, host='localhost'):
                 print err
                 exit(1)
 
-        args_dict = get_stats(sock, ['show slab\n', 'show info\n'], ['items_used', 'arena_used', 'recovery_lag', 'config', 'check_error'], sock_timeout)
+        args_dict = get_stats(sock, ['show slab\n', 'show info\n', 'show configuration\n'], ['items_used', 'arena_used', 'recovery_lag', 'config', 'primary_port', 'check_error'], sock_timeout)
         args_dict['aport'] = aport
         sock.close()
 
@@ -182,6 +183,7 @@ def make_proc_dict(adm_port_list, host='localhost'):
             'arena_used': lambda x: int(x.rsplit('.')[0]),
             'recovery_lag': lambda x: int(x.rsplit('.')[0]),
             'config': lambda x: x.strip(' "'),
+            'primary_port': lambda x: x.strip(' "'),
         }
 
         for key in set(args_dict.keys()) & set(filters.keys()):
@@ -274,6 +276,11 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
             if proc['config'] != '':
                 if not proc['config'] in cfg_dict.keys():
                     yield "Octopus/Tarantool with admin port %s is running without config!" % proc['aport']
+                else:
+                    if proc['aport'] != cfg_dict[proc['config']]['aport']:
+                        yield "Octopus/Tarantool with admin port %s has problem in config: admin port missmatch." % proc['aport']
+                    elif proc['primary_port'] != cfg_dict[proc['config']]['primary_port']:
+                        yield "Octopus/Tarantool with admin port %s has problem in config: primary port missmatch." % proc['aport']
             else:
                 yield "Octopus/Tarantool with admin port %s runs on error: Can't get config from process." % proc['aport']
 
