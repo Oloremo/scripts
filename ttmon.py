@@ -78,9 +78,13 @@ def open_socket(sock, timeout, host, port):
         if hasattr(err, 'errno'):
             if err.errno == errno.ECONNREFUSED:
                 raise Exception('ECONNREFUSED')
+            elif err.errno == errno.EPIPE:
+                raise Exception('EPIPE')
         else:
             if err[1] == "Connection refused":
                 raise Exception('ECONNREFUSED')
+            elif err[1] == "Broken pipe":
+                raise Exception('EPIPE')
 
         ### If none of above - we have a unhandled exeption.
         print "Socket error. Unknown. Port was %s" % port
@@ -103,6 +107,7 @@ def read_socket(sock, timeout=1, recv_buffer=4096):
                     ### Have we reached end of data?
                     for line in buffer.splitlines():
                             if '---' in line or '...' in line:
+                            #if '...' in line:
                                     receiving = False
             else:
                     buffer = 'check_error: Timeout after %s second' % timeout
@@ -120,7 +125,15 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
     args_dict['recovery_lag'] = 0
 
     for command in commands:
-        sock.sendall(command)
+        try:
+            sock.sendall(command)
+        except socket.error, err:
+            if hasattr(err, 'errno'):
+                if err.errno == errno.EPIPE:
+                    raise Exception('EPIPE')
+            else:
+                if err[1] == "Broken pipe":
+                    raise Exception('EPIPE')
 
         for line in read_socket(sock, timeout):
             for my_arg in arg:
@@ -165,6 +178,23 @@ def make_proc_dict(adm_port_list, host='localhost'):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             open_socket(sock, sock_timeout, host, aport)
+            args_dict = get_stats(sock, ['show slab\n', 'show info\n', 'show configuration\n'], ['items_used', 'arena_used', 'recovery_lag', 'config', 'primary_port', 'check_error'], sock_timeout)
+            args_dict['aport'] = aport
+            sock.close()
+
+            filters = {
+                'items_used': lambda x: int(x.rsplit('.')[0]),
+                'arena_used': lambda x: int(x.rsplit('.')[0]),
+                'recovery_lag': lambda x: int(x.rsplit('.')[0]),
+                'config': lambda x: x.strip(' "'),
+                'primary_port': lambda x: x.strip(' "'),
+            }
+
+            for key in set(args_dict.keys()) & set(filters.keys()):
+                if args_dict[key] != '' and args_dict[key] != 0:
+                    args_dict[key] = filters[key](args_dict[key])
+
+            adm_dict_loc[aport] = args_dict
         except Exception, err:
             if 'TO_ERROR' in err:
                 adm_dict_loc[aport] = {'aport': aport, 'check_error': "Timeout after %s second" % sock_timeout}
@@ -173,24 +203,6 @@ def make_proc_dict(adm_port_list, host='localhost'):
             else:
                 print err
                 exit(1)
-
-        args_dict = get_stats(sock, ['show slab\n', 'show info\n', 'show configuration\n'], ['items_used', 'arena_used', 'recovery_lag', 'config', 'primary_port', 'check_error'], sock_timeout)
-        args_dict['aport'] = aport
-        sock.close()
-
-        filters = {
-            'items_used': lambda x: int(x.rsplit('.')[0]),
-            'arena_used': lambda x: int(x.rsplit('.')[0]),
-            'recovery_lag': lambda x: int(x.rsplit('.')[0]),
-            'config': lambda x: x.strip(' "'),
-            'primary_port': lambda x: x.strip(' "'),
-        }
-
-        for key in set(args_dict.keys()) & set(filters.keys()):
-            if args_dict[key] != '' and args_dict[key] != 0:
-                args_dict[key] = filters[key](args_dict[key])
-
-        adm_dict_loc[aport] = args_dict
 
     return adm_dict_loc
 
