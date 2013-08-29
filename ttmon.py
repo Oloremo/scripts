@@ -10,13 +10,14 @@ from select import select  # for socket reading
 from optparse import OptionParser, OptionGroup  # for options parser
 from os.path import isfile  # for OS file check
 import errno                # for exeption handling
+import MySQLdb              # for mysql
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                 choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc'],
+                 choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger'],
                  help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc"')
 
 group = OptionGroup(parser, "Ajusting limits")
@@ -24,6 +25,7 @@ group.add_option("-c", dest="crit_limit", type="int", help="Critical limit. Defa
 group.add_option("-w", dest="warn_limit", type="int", help="Warning limit. Defaults slab = 80. repl = 5")
 group.add_option("-i", dest="info_limit", type="int", help="Info limit. Defaults slab = 70. repl = 1")
 group.add_option("--exit", dest="exit_code", type="int", default="3", help="Exit code for infrastructure monitoring. Default: 3(Info)")
+group.add_option("--conf", dest="config", type="str", default="/etc/ttmon.conf", help="Config file. Used in pinger check. Default: /etc/ttmon.conf")
 parser.add_option_group(group)
 
 (opts, args) = parser.parse_args()
@@ -54,7 +56,7 @@ def open_file(filename):
     """ We try to open file and copy it into list. """
 
     if not isfile(filename):
-        print "I/O error. There is no '%s' but we find it before by glob. Check me." % filename
+        print "I/O error. There is no '%s'. Check me." % filename
         raise Exception('NO_FILE')
     try:
         return list(open(filename))
@@ -105,6 +107,7 @@ def read_socket(sock, timeout=1, recv_buffer=4096):
                     buffer += data
 
                     ### Have we reached end of data?
+                    ### FIXME - json
                     for line in buffer.splitlines():
                             if '---' in line or '...' in line:
                             #if '...' in line:
@@ -245,19 +248,19 @@ def make_chkcfg_list():
 
     return chkcfg_list_loc
 
-def make_adm_port_list(tt_proc_list):
-    """ Parsing tt_proc list to get admin ports from it """
+def make_port_list(tt_proc_list, pattern):
+    """ Parsing tt_proc list to get ports from it """
 
-    p = re.compile(' adm:.*\d+')
+    p = re.compile(pattern)
     d = re.compile('\d+')
-    adm_port_list_loc = []
+    port_list_loc = []
     for tt_proc in tt_proc_list:
             if p.findall(tt_proc):
-                    aport = p.findall(tt_proc)[0]
-                    aport = d.findall(aport)[0]
-                    adm_port_list_loc.append(aport)
+                    port = p.findall(tt_proc)[0]
+                    port = d.findall(port)[0]
+                    port_list_loc.append(port)
 
-    return adm_port_list_loc
+    return port_list_loc
 
 def print_alert(check_item, size, limit, aport, error):
     """ Helper fuction to print nice alrts """
@@ -387,11 +390,67 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
         print_list(result_info)
         exit(3)
 
+def getip():
+    """ Returns ip of this server """
+
+    p = re.compile('mail.ru$')
+    p2 = re.compile('i.mail.ru$')
+    hostname = socket.gethostname()
+
+    ### Strip ext part of domain name if exist
+    if p2.findall(hostname):
+        hostname = hostname.rstrip('.mail.ru')
+    elif p.findall(hostname):
+        hostname = hostname.rstrip('mail.ru')
+        hostname += '.i'
+    ipaddr = socket.gethostbyname(hostname)
+
+    return ipaddr
+
+def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
+    """ Check if octopus\tt on this host is in pinger database """
+
+    conf_dict = {}
+    pinger_list = []
+    port_set = set('')
+    ip = getip()
+
+    ### Open conf file and make a dict from it
+    try:
+        for line in open_file(config):
+            (key, val) = line.split()
+            conf_dict[key.rstrip(':')] = val
+    except Exception, err:
+        if 'NO_FILE' in err:
+            exit(2)
+        elif 'IO_ERROR' in err:
+            exit(1)
+
+    ### Make a set of ports
+    for ports in pri_port_list, sec_port_list:
+        port_set |= set(ports)
+
+    ### Connect to db and check remote_stor_ping table for ip:port on this host
+    try:
+        db = MySQLdb.connect(host=conf_dict['host'], user=conf_dict['user'], passwd=conf_dict['pass'], db=conf_dict['db'])
+        cur = db.cursor()
+        for port in port_set:
+            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ip, port))
+            if int(cur.rowcount) is 0:
+                pinger_list.append('Octopus/Tarantool with port %s not found in pinger database!' % port)
+    except Exception:
+            print 'MySQL error. Check me.'
+            exit(1)
+
+    if pinger_list:
+        print_list(pinger_list)
+        exit(2)
+
 ### Do the work
 if opts.type == 'infr_cvp':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_adm_port_list(tt_proc_list)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
     cfg_list = make_paths_list(cfg_paths_list)
     cfg_dict = make_cfg_dict(cfg_list)
 
@@ -401,7 +460,7 @@ if opts.type == 'infr_cvp':
 if opts.type == 'infr_pvc':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_adm_port_list(tt_proc_list)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
     cfg_list = make_paths_list(cfg_paths_list)
     cfg_dict = make_cfg_dict(cfg_list)
     proc_dict = make_proc_dict(adm_port_list)
@@ -420,7 +479,7 @@ if opts.type == 'infr_ivc':
 if opts.type == 'slab':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_adm_port_list(tt_proc_list)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
     proc_dict = make_proc_dict(adm_port_list)
 
     ### Check stuff
@@ -429,8 +488,17 @@ if opts.type == 'slab':
 if opts.type == 'repl':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_adm_port_list(tt_proc_list)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
     proc_dict = make_proc_dict(adm_port_list)
 
     ### Check stuff
     check_stats(adm_port_list, proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit, check_repl=True)
+
+if opts.type == 'pinger':
+    ### Make stuff
+    tt_proc_list = make_tt_proc_list(proc_pattern)
+    sec_port_list = make_port_list(tt_proc_list, ' sec:.*\d+')
+    pri_port_list = make_port_list(tt_proc_list, ' pri:.*\d+')
+
+    ### Check stuff
+    check_pinger(pri_port_list, sec_port_list, opts.config)
