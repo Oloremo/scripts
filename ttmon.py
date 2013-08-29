@@ -217,10 +217,10 @@ def make_paths_list(paths, basename=False):
             if basename:
                     path = path.rsplit('/', 1)
                     chdir(path[0])
-                    if len(glob(path[1])) != 0:
+                    if glob(path[1]):
                             paths_list_loc.extend(glob(path[1]))
             else:
-                    if len(glob(path)) != 0:
+                    if glob(path):
                             paths_list_loc.extend(glob(path))
 
     return paths_list_loc
@@ -302,7 +302,7 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
 def check_init_vs_chk(init_list, chkcfg_list):
     """ Check init scripts vs chkconfig """
 
-    if len(init_list) == 0:
+    if not init_list:
         yield "Octopus/Tarantool init scripts not found!"
     else:
         for init in init_list:
@@ -327,7 +327,7 @@ def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=Fal
         for alert in check_init_vs_chk(init_list, chkcfg_list):
                 errors_list.append(alert)
 
-    if len(errors_list) != 0:
+    if errors_list:
             print_list(errors_list)
             exit(exit_code)
 
@@ -376,17 +376,17 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
                         result_info.append(print_alert('arena_used', arena_used, info, aport, error))
 
     ### Depending on situation it prints revelant list filled with alert strings
-    if len(result_critical) != 0 and len(result_warning) != 0:
+    if result_critical and result_warning:
         print_list(result_critical)
         print_list(result_warning)
         exit(1)
-    elif len(result_critical) != 0 and len(result_warning) == 0:
+    elif result_critical and not result_warning:
         print_list(result_critical)
         exit(1)
-    elif len(result_warning) != 0:
+    elif result_warning:
         print_list(result_warning)
         exit(2)
-    elif len(result_info) != 0:
+    elif result_info:
         print_list(result_info)
         exit(3)
 
@@ -438,8 +438,9 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
             cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ip, port))
             if int(cur.rowcount) is 0:
                 pinger_list.append('Octopus/Tarantool with port %s not found in pinger database!' % port)
-    except Exception:
+    except Exception, err:
             print 'MySQL error. Check me.'
+            print err
             exit(1)
 
     if pinger_list:
