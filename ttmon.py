@@ -302,9 +302,10 @@ def check_init_vs_chk(init_list, chkcfg_list):
         yield "Octopus/Tarantool init scripts not found!"
     else:
         for init in init_list:
-            p = re.compile(r'^%s.*3:on.*' % init)
-            if not filter(p.search, chkcfg_list):
-                yield 'Init script "%s" is not added to chkconfig!' % init
+            if init != 'octopus' and init != 'tarantool_box' and 'wrapper' not in init:
+                p = re.compile(r'^%s\s+.*3:on.*' % init)
+                if not filter(p.match, chkcfg_list):
+                    yield 'Init script "%s" is not added to chkconfig!' % init
 
 def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=False):
     """ Main infrastructure check """
