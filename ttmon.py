@@ -11,6 +11,7 @@ from optparse import OptionParser, OptionGroup  # for options parser
 from os.path import isfile  # for OS file check
 import errno                # for exeption handling
 import MySQLdb              # for mysql
+import yaml                 # for yaml
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
@@ -107,29 +108,26 @@ def read_socket(sock, timeout=1, recv_buffer=4096):
                     buffer += data
 
                     ### Have we reached end of data?
-                    ### FIXME - json
                     for line in buffer.splitlines():
-                            if '---' in line or '...' in line:
-                            #if '...' in line:
-                                    receiving = False
+                            if '...' in line:
+                                receiving = False
             else:
                     buffer = 'check_error: Timeout after %s second' % timeout
                     receiving = False
 
-    for line in buffer.splitlines():
-            yield line
+    yml = yaml.safe_load(buffer)
+    return yml
 
 def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
     """ Parsing internal tt\octopus info from admin port """
 
     args_dict = {}
-    for my_arg in arg:
-        args_dict[my_arg] = ''
-    args_dict['recovery_lag'] = 0
+    theonedict = {}
 
     for command in commands:
         try:
             sock.sendall(command)
+            theonedict.update(read_socket(sock, timeout).values()[0])
         except socket.error, err:
             if hasattr(err, 'errno'):
                 if err.errno == errno.EPIPE:
@@ -138,10 +136,9 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
                 if err[1] == "Broken pipe":
                     raise Exception('EPIPE')
 
-        for line in read_socket(sock, timeout):
-            for my_arg in arg:
-                if my_arg + ':' in line:
-                    args_dict[my_arg] = line.split(':', -1)[1]
+    for key in set(theonedict.iterkeys()) & set(arg):
+        args_dict[key] = theonedict[key]
+        args_dict['check_error'] = ''
 
     sock.sendall('quit\n')
     return args_dict
@@ -186,15 +183,13 @@ def make_proc_dict(adm_port_list, host='localhost'):
             sock.close()
 
             filters = {
-                'items_used': lambda x: int(x.rsplit('.')[0]),
-                'arena_used': lambda x: int(x.rsplit('.')[0]),
-                'recovery_lag': lambda x: int(x.rsplit('.')[0]),
-                'config': lambda x: x.strip(' "'),
-                'primary_port': lambda x: x.strip(' "'),
+                'items_used': lambda x: int(str(x).rsplit('.')[0]),
+                'arena_used': lambda x: int(str(x).rsplit('.')[0]),
+                'recovery_lag': lambda x: int(str(x).rsplit('.')[0]),
             }
 
             for key in set(args_dict.keys()) & set(filters.keys()):
-                if args_dict[key] != '' and args_dict[key] != 0:
+                if args_dict[key] != '' and args_dict[key] is not 0:
                     args_dict[key] = filters[key](args_dict[key])
 
             adm_dict_loc[aport] = args_dict
