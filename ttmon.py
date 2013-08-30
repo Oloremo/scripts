@@ -140,7 +140,7 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
 
     for key in set(theonedict.iterkeys()) & set(arg):
         args_dict[key] = theonedict[key]
-        
+
     sock.sendall('quit\n')
     return args_dict
 
@@ -414,12 +414,17 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
     ### Open conf file and make a dict from it
     try:
         for line in open_file(config):
-            (key, val) = line.split()
-            conf_dict[key.rstrip(':')] = val
+            line = line.strip()
+            if line and not line.startswith("#"):
+                (key, val) = line.split()
+                conf_dict[key.rstrip(':')] = val
     except Exception, err:
         if 'NO_FILE' in err:
             exit(2)
         elif 'IO_ERROR' in err:
+            exit(1)
+        else:
+            print "Unhandled exeption. Check me."
             exit(1)
 
     ### Make a set of ports
