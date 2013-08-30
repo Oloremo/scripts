@@ -122,6 +122,8 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
     """ Parsing internal tt\octopus info from admin port """
 
     args_dict = {}
+    args_dict['recovery_lag'] = 0
+    args_dict['check_error'] = ''
     theonedict = {}
 
     for command in commands:
@@ -138,8 +140,7 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
 
     for key in set(theonedict.iterkeys()) & set(arg):
         args_dict[key] = theonedict[key]
-        args_dict['check_error'] = ''
-
+        
     sock.sendall('quit\n')
     return args_dict
 
