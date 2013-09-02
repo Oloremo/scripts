@@ -4,14 +4,13 @@ import socket              # for network
 import subprocess          # for "ps aux"
 import re                  # for regexps
 from glob import glob      # for fs file paths
-from sys import exit       # for exit code
+from sys import exit, stdout, version_info      # for exit code, output func and version check
 from os import chdir       # for glob()
 from select import select  # for socket reading
 from optparse import OptionParser, OptionGroup  # for options parser
 from os.path import isfile  # for OS file check
 import errno                # for exeption handling
 import MySQLdb              # for mysql
-import yaml                 # for yaml
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
@@ -52,18 +51,33 @@ init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 sock_timeout = 0.5
 
+if version_info[1] >= 6:
+    ### Python 2.6
+    isEL6 = True
+else:
+    ### Python 2.4
+    isEL6 = False
+
 ### Functions
+
+def output(line):
+    if isEL6:
+        stdout.write(line + "<br>")
+        stdout.flush()
+    else:
+        print line
+
 def open_file(filename):
     """ We try to open file and copy it into list. """
 
     if not isfile(filename):
-        print "I/O error. There is no '%s'. Check me." % filename
+        output("I/O error. There is no '%s'. Check me." % filename)
         raise Exception('NO_FILE')
     try:
         return list(open(filename))
     except IOError, err:
-        print "I/O error. Can't open file '%s'. Check me." % filename
-        print "Error %s: %s" % (err.errno, err.strerror)
+        output("I/O error. Can't open file '%s'. Check me." % filename)
+        output("Error %s: %s" % (err.errno, err.strerror))
         raise Exception('IO_ERROR')
     except:
         raise Exception
@@ -90,13 +104,13 @@ def open_socket(sock, timeout, host, port):
                 raise Exception('EPIPE')
 
         ### If none of above - we have a unhandled exeption.
-        print "Socket error. Unknown. Port was %s" % port
-        print err
+        output("Socket error. Unknown. Port was %s" % port)
+        output(err)
         raise Exception
         exit(1)
     return False
 
-def read_socket(sock, timeout=1, recv_buffer=4096):
+def read_socket(sock, timeout=1, recv_buffer=16384):
     """ Nice way to read from socket. We use select() for timeout and recv handling """
 
     buffer = ''
@@ -115,21 +129,20 @@ def read_socket(sock, timeout=1, recv_buffer=4096):
                     buffer = 'check_error: Timeout after %s second' % timeout
                     receiving = False
 
-    yml = yaml.safe_load(buffer)
-    return yml
+    for line in buffer.splitlines():
+        yield line
 
-def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
+def get_stats(sock, commands, arg, timeout=1, recv_buffer=16384):
     """ Parsing internal tt\octopus info from admin port """
 
     args_dict = {}
+    for my_arg in arg:
+        args_dict[my_arg] = ''
     args_dict['recovery_lag'] = 0
-    args_dict['check_error'] = ''
-    theonedict = {}
 
     for command in commands:
         try:
             sock.sendall(command)
-            theonedict.update(read_socket(sock, timeout).values()[0])
         except socket.error, err:
             if hasattr(err, 'errno'):
                 if err.errno == errno.EPIPE:
@@ -138,8 +151,10 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=4096):
                 if err[1] == "Broken pipe":
                     raise Exception('EPIPE')
 
-    for key in set(theonedict.iterkeys()) & set(arg):
-        args_dict[key] = theonedict[key]
+        for line in read_socket(sock, timeout):
+            for my_arg in arg:
+                if my_arg + ':' in line:
+                    args_dict[my_arg] = line.split(':', -1)[1]
 
     sock.sendall('quit\n')
     return args_dict
@@ -157,8 +172,8 @@ def make_cfg_dict(cfg_list):
                 elif 'IO_ERROR' in err:
                     exit(1)
                 else:
-                    print "Fatal error. Something bad happend. Check me."
-                    print err
+                    output("Fatal error. Something bad happend. Check me.")
+                    output(err)
                     exit(1)
 
             cfg_dict_loc[cfg_file] = {'primary_port': '', 'aport': '', 'config': ''}
@@ -187,6 +202,8 @@ def make_proc_dict(adm_port_list, host='localhost'):
                 'items_used': lambda x: int(str(x).rsplit('.')[0]),
                 'arena_used': lambda x: int(str(x).rsplit('.')[0]),
                 'recovery_lag': lambda x: int(str(x).rsplit('.')[0]),
+                'config': lambda x: x.strip(' "'),
+                'primary_port': lambda x: x.strip(' "'),
             }
 
             for key in set(args_dict.keys()) & set(filters.keys()):
@@ -200,7 +217,7 @@ def make_proc_dict(adm_port_list, host='localhost'):
             elif 'ECONNREFUSED' in err:
                 adm_dict_loc[aport] = {'aport': aport, 'check_error': "Connection refused"}
             else:
-                print err
+                output(err)
                 exit(1)
 
     return adm_dict_loc
@@ -270,7 +287,7 @@ def print_list(list):
     """ Eh... well... it's printing the list... string by string... """
 
     for string in list:
-        print string
+        output(string)
 
 def check_cfg_vs_proc(cfg_dict):
     """ Check configs vs proccesses """
@@ -425,7 +442,7 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
         elif 'IO_ERROR' in err:
             exit(1)
         else:
-            print "Unhandled exeption. Check me."
+            output("Unhandled exeption. Check me.")
             exit(1)
 
     ### Make a set of ports
@@ -441,8 +458,8 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
             if int(cur.rowcount) is 0:
                 pinger_list.append('Octopus/Tarantool with port %s not found in pinger database!' % port)
     except Exception, err:
-            print 'MySQL error. Check me.'
-            print err
+            output('MySQL error. Check me.')
+            output(err)
             exit(1)
 
     if pinger_list:
