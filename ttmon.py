@@ -49,7 +49,7 @@ elif opts.type == 'repl':
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg']
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
-sock_timeout = 0.5
+sock_timeout = 0.1
 
 if version_info[1] >= 6:
     ### Python 2.6
@@ -110,7 +110,7 @@ def open_socket(sock, timeout, host, port):
         exit(1)
     return False
 
-def read_socket(sock, timeout=1, recv_buffer=16384):
+def read_socket(sock, timeout=1, recv_buffer=262144):
     """ Nice way to read from socket. We use select() for timeout and recv handling """
 
     buffer = ''
@@ -132,7 +132,7 @@ def read_socket(sock, timeout=1, recv_buffer=16384):
     for line in buffer.splitlines():
         yield line
 
-def get_stats(sock, commands, arg, timeout=1, recv_buffer=16384):
+def get_stats(sock, commands, arg, timeout=1, recv_buffer=262144):
     """ Parsing internal tt\octopus info from admin port """
 
     args_dict = {}
