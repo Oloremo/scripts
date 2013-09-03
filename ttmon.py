@@ -144,7 +144,7 @@ def get_stats(sock, lookup_dict, timeout=0.1, recv_buffer=262144):
 
     for command in lookup_dict.keys():
         try:
-            sock.sendall(command)
+            sock.sendall(command + '\n')
             args_set = set(lookup_dict[command])
         except socket.error, err:
             if hasattr(err, 'errno'):
