@@ -132,17 +132,20 @@ def read_socket(sock, timeout=1, recv_buffer=262144):
     for line in buffer.splitlines():
         yield line
 
-def get_stats(sock, commands, arg, timeout=1, recv_buffer=262144):
+def get_stats(sock, lookup_dict, timeout=0.1, recv_buffer=262144):
     """ Parsing internal tt\octopus info from admin port """
 
     args_dict = {}
-    for my_arg in arg:
-        args_dict[my_arg] = ''
+    for list in lookup_dict.itervalues():
+        for arg in list:
+                args_dict[arg] = ''
     args_dict['recovery_lag'] = 0
+    args_dict['check_error'] = ''
 
-    for command in commands:
+    for command in lookup_dict.keys():
         try:
             sock.sendall(command)
+            args_set = set(lookup_dict[command])
         except socket.error, err:
             if hasattr(err, 'errno'):
                 if err.errno == errno.EPIPE:
@@ -151,10 +154,16 @@ def get_stats(sock, commands, arg, timeout=1, recv_buffer=262144):
                 if err[1] == "Broken pipe":
                     raise Exception('EPIPE')
 
+        need = len(args_set)
+        got = 0
         for line in read_socket(sock, timeout):
-            for my_arg in arg:
-                if my_arg + ':' in line:
-                    args_dict[my_arg] = line.split(':', -1)[1]
+            if got < need:
+                line = line.strip().split(':', -1)
+                if line[0] in args_set:
+                    args_dict[line[0]] = line[1]
+                    got += 1
+            else:
+                break
 
     sock.sendall('quit\n')
     return args_dict
@@ -190,11 +199,16 @@ def make_proc_dict(adm_port_list, host='localhost'):
     """ Making dict from running tt\octopus """
 
     adm_dict_loc = {}
+    lookup_dict = {'show slab': ['items_used', 'arena_used'],
+                   'show info': ['recovery_lag', 'config'],
+                   'show configuration': ['primary_port']
+                  }
+
     for aport in adm_port_list:
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             open_socket(sock, sock_timeout, host, aport)
-            args_dict = get_stats(sock, ['show slab\n', 'show info\n', 'show configuration\n'], ['items_used', 'arena_used', 'recovery_lag', 'config', 'primary_port', 'check_error'], sock_timeout)
+            args_dict = get_stats(sock, lookup_dict, sock_timeout)
             args_dict['aport'] = aport
             sock.close()
 
