@@ -17,8 +17,8 @@ usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                 choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger'],
-                 help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc"')
+                 choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc'],
+                 help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc"')
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-c", dest="crit_limit", type="int", help="Critical limit. Defaults: slab = 90. repl = 10")
@@ -49,7 +49,14 @@ elif opts.type == 'repl':
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg']
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
+octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 sock_timeout = 0.1
+crc_lag_limit = 2220
+general_dict = {'show slab': ['items_used', 'arena_used'],
+               'show info': ['recovery_lag', 'config'],
+               'show configuration': ['primary_port']}
+crc_check_dict = {'show configuration': ['wal_feeder_addr'],
+                  'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
 if version_info[1] >= 6:
     ### Python 2.6
@@ -195,14 +202,10 @@ def make_cfg_dict(cfg_list):
 
     return cfg_dict_loc
 
-def make_proc_dict(adm_port_list, host='localhost'):
+def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
     """ Making dict from running tt\octopus """
 
     adm_dict_loc = {}
-    lookup_dict = {'show slab': ['items_used', 'arena_used'],
-                   'show info': ['recovery_lag', 'config'],
-                   'show configuration': ['primary_port']
-                  }
 
     for aport in adm_port_list:
         try:
@@ -216,6 +219,7 @@ def make_proc_dict(adm_port_list, host='localhost'):
                 'items_used': lambda x: int(str(x).rsplit('.')[0]),
                 'arena_used': lambda x: int(str(x).rsplit('.')[0]),
                 'recovery_lag': lambda x: int(str(x).rsplit('.')[0]),
+                'recovery_run_crc_lag': lambda x: int(str(x).rsplit('.')[0]),
                 'config': lambda x: x.strip(' "'),
                 'primary_port': lambda x: x.strip(' "'),
             }
@@ -480,6 +484,18 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
         print_list(pinger_list)
         exit(2)
 
+def check_crc(adm_port_list, proc_dict, crc_lag_limit=2220):
+    """ Octopus crc check """
+
+    for aport in proc_dict.keys():
+        if proc_dict[aport]['wal_feeder_addr'] != '':
+            if proc_dict[aport]['recovery_run_crc_status'].strip() != 'ok':
+                output('Octopus with admin port %s. Difference between master and replica FOUND. CRC32 mismatch. Status is "%s"' % (aport, proc_dict[aport]['recovery_run_crc_status']))
+            elif proc_dict[aport]['recovery_run_crc_lag'] > crc_lag_limit:
+                output('Octopus with admin port %s. "recovery_run_crc_lag" is more than %s - %s' % (aport, crc_lag_limit, proc_dict[aport]['recovery_run_crc_lag']))
+        else:
+            output('Octopus with admin port %s used in "octopus crc check" and looks like it dont have "wal_feeder_addr" in conf. Check me.' % aport)
+
 ### Do the work
 if opts.type == 'infr_cvp':
     ### Make stuff
@@ -497,7 +513,7 @@ if opts.type == 'infr_pvc':
     adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
     cfg_list = make_paths_list(cfg_paths_list)
     cfg_dict = make_cfg_dict(cfg_list)
-    proc_dict = make_proc_dict(adm_port_list)
+    proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
     check_infrastructure(opts.exit_code, infr_pvc=True)
@@ -514,7 +530,7 @@ if opts.type == 'slab':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
-    proc_dict = make_proc_dict(adm_port_list)
+    proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
     check_stats(adm_port_list, proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit)
@@ -523,7 +539,7 @@ if opts.type == 'repl':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
-    proc_dict = make_proc_dict(adm_port_list)
+    proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
     check_stats(adm_port_list, proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit, check_repl=True)
@@ -536,3 +552,12 @@ if opts.type == 'pinger':
 
     ### Check stuff
     check_pinger(pri_port_list, sec_port_list, opts.config)
+
+if opts.type == 'octopus_crc':
+    ### Make stuff
+    tt_proc_list = make_tt_proc_list(octopus_repl_pattern)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
+    proc_dict = make_proc_dict(adm_port_list, crc_check_dict)
+
+    ### Check stuff
+    check_crc(adm_port_list, proc_dict, crc_lag_limit)
