@@ -6,7 +6,7 @@ from sys import exit, stdout, version_info  # for exit code, output func and ver
 from optparse import OptionParser           # for usage
 
 ### Gotta catch 'em all!
-usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-x EXCLUDE]"
+usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-x PARTITION] [-a FS_TYPE]"
 parser = OptionParser(usage=usage)
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
                   help="Critical limit. Default: 20% for 'pct' and 5000Mb for 'space'")
