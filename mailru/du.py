@@ -9,7 +9,7 @@ from optparse import OptionParser           # for usage
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-x EXCLUDE]"
 parser = OptionParser(usage=usage)
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
-                  help="Critical limit. Default: 20")
+                  help="Critical limit. Default: 20% for 'pct' and 5000Mb for 'space'")
 parser.add_option("-w", "--warn", type="int", dest="warn_limit", default=False,
                   help="Warning limit. Default: False")
 parser.add_option("-x", type="str", action="append", dest="ex_list",
