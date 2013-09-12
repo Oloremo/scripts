@@ -14,7 +14,7 @@ parser.add_option("-w", "--warn", type="int", dest="warn_limit", default=False,
                   help="Warning limit. Default: False")
 parser.add_option("-x", type="str", action="append", dest="ex_list",
                   help="Exclude list. This partitions won't be cheked.")
-parser.add_option("-a", type="str", action="append", dest="fs_type_list",
+parser.add_option("-a", type="str", action="append", dest="fs_type",
                   help="Append fs to check list. By default we check only 'ext2', 'ext3', 'ext4', 'xfs'")
 parser.add_option('-t', '--type', type='choice', action='store', dest='type', default='pct',
                  choices=['pct', 'space'], help='Check type. Chose from "pct" and "space"')
@@ -32,8 +32,8 @@ elif opts.type == 'space':
 
 ### Assign global variables
 fs_type_list = ['ext2', 'ext3', 'ext4', 'xfs']
-if opts.fs_type_list:
-    fs_type_list.extend(opts.fs_type_list)
+if opts.fs_type:
+    fs_type_list.extend(opts.fs_type)
 ex_list = opts.ex_list
 
 ### Version check
