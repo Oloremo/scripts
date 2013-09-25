@@ -480,7 +480,7 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
                 pinger_list.append('Octopus/Tarantool with port %s not found in pinger database!' % port)
     except Exception, err:
             output('MySQL error. Check me.')
-            output(err)
+            ### We cant print exeption error here 'cos it can contain auth data
             exit(1)
 
     if pinger_list:
