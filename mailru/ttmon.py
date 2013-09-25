@@ -46,7 +46,7 @@ elif opts.type == 'repl':
                 opts.info_limit = 1
 
 ### Global vars
-cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg']
+cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
