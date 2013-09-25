@@ -376,15 +376,19 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
     for proc in proc_dict.keys():
         aport = proc_dict[proc]['aport']
         error = proc_dict[proc]['check_error']
+
         if error != '':
-            result_critical.append(print_alert('', '', '', aport, error))
+            result_critical.append(print_alert('', '', '', aport, proc_dict[proc]['check_error']))
             continue
+        if proc_dict[proc]['items_used'] == '' or proc_dict[proc]['arena_used'] == '':
+            result_critical.append(print_alert('', '', '', aport, 'Cant get items_used or arena_used from process.'))
+            continue
+
         items_used = proc_dict[proc]['items_used']
         arena_used = proc_dict[proc]['arena_used']
         rep_lag = proc_dict[proc]['recovery_lag']
 
         if check_repl:
-
                 if rep_lag == '':
                     result_critical.append(print_alert('', '', '', aport, "Can't get replication lag info. Check me."))
                     continue
