@@ -319,16 +319,19 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
     """ Check proccess vs configs """
 
     for proc in proc_dict.itervalues():
-            if proc['config'] != '':
-                if not proc['config'] in cfg_dict.keys():
-                    yield "Octopus/Tarantool with admin port %s is running without config!" % proc['aport']
-                else:
-                    if proc['aport'] != cfg_dict[proc['config']]['aport']:
-                        yield "Octopus/Tarantool with admin port %s has problem in config: admin port missmatch." % proc['aport']
-                    elif proc['primary_port'] != cfg_dict[proc['config']]['primary_port']:
-                        yield "Octopus/Tarantool with admin port %s has problem in config: primary port missmatch." % proc['aport']
+        if proc['check_error'] != '':
+            yield "Octopus/Tarantool with admin port %s runs on error: %s" % (proc['aport'], proc['check_error'])
+            continue
+        if proc['config'] != '':
+            if not proc['config'] in cfg_dict.keys():
+                yield "Octopus/Tarantool with admin port %s is running without config!" % proc['aport']
             else:
-                yield "Octopus/Tarantool with admin port %s runs on error: Can't get config from process." % proc['aport']
+                if proc['aport'] != cfg_dict[proc['config']]['aport']:
+                    yield "Octopus/Tarantool with admin port %s has problem in config: admin port missmatch." % proc['aport']
+                elif proc['primary_port'] != cfg_dict[proc['config']]['primary_port']:
+                    yield "Octopus/Tarantool with admin port %s has problem in config: primary port missmatch." % proc['aport']
+        else:
+            yield "Octopus/Tarantool with admin port %s runs on error: Can't get config from process." % proc['aport']
 
 def check_init_vs_chk(init_list, chkcfg_list):
     """ Check init scripts vs chkconfig """
