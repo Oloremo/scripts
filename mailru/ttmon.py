@@ -47,7 +47,7 @@ elif opts.type == 'repl':
 
 ### Global vars
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
-cfg_excl_re = 'tarantool.*feeder'
+cfg_excl_re = 'tarantool.*feeder.*.cfg$'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
@@ -535,7 +535,7 @@ if opts.type == 'infr_pvc':
 
 if opts.type == 'infr_ivc':
     ### Make stuff
-    init_list = make_paths_list(init_paths_list, basename=True)
+    init_list = make_paths_list(init_paths_list, cfg_excl_re, basename=True)
     chkcfg_list = make_chkcfg_list()
 
     ### Check stuff
