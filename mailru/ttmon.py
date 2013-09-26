@@ -47,6 +47,7 @@ elif opts.type == 'repl':
 
 ### Global vars
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
+cfg_excl_re = 'tarantool.*feeder'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
@@ -240,10 +241,12 @@ def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
 
     return adm_dict_loc
 
-def make_paths_list(paths, basename=False):
+def make_paths_list(paths, excl_pattern, basename=False):
     """ Make a list with paths to files. Full path to cfg and just basename for init scripts """
 
     paths_list_loc = []
+    p = re.compile(excl_pattern)
+
     for path in paths:
             if basename:
                     path = path.rsplit('/', 1)
@@ -254,6 +257,7 @@ def make_paths_list(paths, basename=False):
                     if glob(path):
                             paths_list_loc.extend(glob(path))
 
+    paths_list_loc  = [ item for item in paths_list_loc if not p.findall(item) ]
     return paths_list_loc
 
 def make_tt_proc_list(pattern):
@@ -446,7 +450,7 @@ def getip():
 
     return ipaddr
 
-def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
+def check_pinger(pri_port_list, sec_port_list, memc_port_list, config='/etc/ttmon.conf'):
     """ Check if octopus\tt on this host is in pinger database """
 
     conf_dict = {}
@@ -471,7 +475,7 @@ def check_pinger(pri_port_list, sec_port_list, config='/etc/ttmon.conf'):
             exit(1)
 
     ### Make a set of ports
-    for ports in pri_port_list, sec_port_list:
+    for ports in pri_port_list, sec_port_list, memc_port_list:
         port_set |= set(ports)
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
@@ -512,7 +516,7 @@ if opts.type == 'infr_cvp':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
-    cfg_list = make_paths_list(cfg_paths_list)
+    cfg_list = make_paths_list(cfg_paths_list, cfg_excl_re)
     cfg_dict = make_cfg_dict(cfg_list)
 
     ### Check stuff
@@ -522,7 +526,7 @@ if opts.type == 'infr_pvc':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
-    cfg_list = make_paths_list(cfg_paths_list)
+    cfg_list = make_paths_list(cfg_paths_list, cfg_excl_re)
     cfg_dict = make_cfg_dict(cfg_list)
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
@@ -560,9 +564,10 @@ if opts.type == 'pinger':
     tt_proc_list = make_tt_proc_list(proc_pattern)
     sec_port_list = make_port_list(tt_proc_list, ' sec:.*\d+')
     pri_port_list = make_port_list(tt_proc_list, ' pri:.*\d+')
+    memc_port_list = make_port_list(tt_proc_list, ' memc:.*\d+')
 
     ### Check stuff
-    check_pinger(pri_port_list, sec_port_list, opts.config)
+    check_pinger(pri_port_list, sec_port_list, memc_port_list,  opts.config)
 
 if opts.type == 'octopus_crc':
     ### Make stuff
