@@ -138,6 +138,10 @@ def check_mysql(mysql_dict, crit, check_repl=False, check_load=False):
 
             if check_repl:
                 cur.execute("show slave status")
+                ### We came to agreement what if where is nothing in "show slave status" we assume what it's master
+                if cur.rowcount == 0:
+                    exit(0)
+
                 ### Get values
                 row = cur.fetchone()
                 ### Get keys
