@@ -167,7 +167,7 @@ def get_stats(sock, lookup_dict, timeout=0.1, recv_buffer=262144):
         for line in read_socket(sock, timeout):
             if got < need:
                 line = line.strip().split(':', -1)
-                if line[0] in args_set:
+                if line[0] in args_set or line[0] == 'check_error':
                     args_dict[line[0]] = line[1]
                     got += 1
             else:
