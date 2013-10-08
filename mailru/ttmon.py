@@ -503,7 +503,8 @@ def check_crc(adm_port_list, proc_dict, crc_lag_limit=2220):
     crc_problems_list = []
 
     for aport in proc_dict.keys():
-        if proc_dict[aport]['wal_feeder_addr'].strip() != '(null)':
+        ### We do not check it on masters and if ignore_run_crc=1
+        if proc_dict[aport]['wal_feeder_addr'].strip() != '(null)' and proc_dict[aport]['recovery_run_crc_status'].strip() != '':
             if proc_dict[aport]['recovery_run_crc_status'].strip() != 'ok':
                 crc_problems_list.append('Octopus with admin port %s. Difference between master and replica FOUND. CRC32 mismatch. Status is "%s"' % (aport, proc_dict[aport]['recovery_run_crc_status']))
             elif proc_dict[aport]['recovery_run_crc_lag'] > crc_lag_limit:
