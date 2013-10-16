@@ -30,7 +30,7 @@ elif opts.type == 'repl':
                 opts.crit_limit = 600
 
 ### Global vars
-mysql_init_path = ['mysql*']
+mysql_init_path = ['mysql-*']
 lookup_list = ['datadir', 'socket']
 bk_log = '/var/tmp/mysql-backup.error'
 
