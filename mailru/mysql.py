@@ -151,7 +151,7 @@ def check_mysql(mysql_dict, crit, check_repl=False, check_load=False):
 
                 if slave_dict['Slave_IO_Running'] == 'Yes' and slave_dict['Slave_SQL_Running'] == 'Yes':
                     if slave_dict['Seconds_Behind_Master'] >= crit:
-                       result_critical.append('Mysql with datadir %s: Seconds_Behind_Master is more than %s - %s' % (mysql_dict[inst]['datadir'], crit, slave_dict['Seconds_Behind_Master']))
+                        result_critical.append('Mysql with datadir %s: Seconds_Behind_Master is more than %s - %s' % (mysql_dict[inst]['datadir'], crit, slave_dict['Seconds_Behind_Master']))
                 else:
                     result_critical.append('Mysql with datadir %s: replication is not running' % (mysql_dict[inst]['datadir']))
             elif check_load:
