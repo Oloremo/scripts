@@ -17,13 +17,14 @@ usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                 choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc'],
-                 help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc"')
+                  choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc'],
+                  help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc"')
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-c", dest="crit_limit", type="int", help="Critical limit. Defaults: slab = 90. repl = 10")
 group.add_option("-w", dest="warn_limit", type="int", help="Warning limit. Defaults slab = 80. repl = 5")
 group.add_option("-i", dest="info_limit", type="int", help="Info limit. Defaults slab = 70. repl = 1")
+group.add_option("-x", type="str", action="append", dest="ex_list", help="Exclude list of ports. This ports won't be cheked by 'pinger' check.")
 group.add_option("--exit", dest="exit_code", type="int", default="3", help="Exit code for infrastructure monitoring. Default: 3(Info)")
 group.add_option("--conf", dest="config", type="str", default="/etc/ttmon.conf", help="Config file. Used in pinger check. Default: /etc/ttmon.conf")
 parser.add_option_group(group)
@@ -54,8 +55,8 @@ octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 sock_timeout = 0.1
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used'],
-               'show info': ['recovery_lag', 'config'],
-               'show configuration': ['primary_port']}
+                'show info': ['recovery_lag', 'config'],
+                'show configuration': ['primary_port']}
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
@@ -257,7 +258,7 @@ def make_paths_list(paths, excl_pattern, basename=False):
                     if glob(path):
                             paths_list_loc.extend(glob(path))
 
-    paths_list_loc  = [ item for item in paths_list_loc if not p.findall(item) ]
+    paths_list_loc = [item for item in paths_list_loc if not p.findall(item)]
     return paths_list_loc
 
 def make_tt_proc_list(pattern):
@@ -452,7 +453,7 @@ def getip():
 
     return ipaddr
 
-def check_pinger(pri_port_list, sec_port_list, memc_port_list, config='/etc/ttmon.conf'):
+def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='/etc/ttmon.conf'):
     """ Check if octopus\tt on this host is in pinger database """
 
     conf_dict = {}
@@ -479,6 +480,9 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, config='/etc/ttmo
     ### Make a set of ports
     for ports in pri_port_list, sec_port_list, memc_port_list:
         port_set |= set(ports)
+
+    if ex_list:
+        port_set.difference_update(set(ex_list))
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
@@ -570,7 +574,7 @@ if opts.type == 'pinger':
     memc_port_list = make_port_list(tt_proc_list, ' memc:.*\d+')
 
     ### Check stuff
-    check_pinger(pri_port_list, sec_port_list, memc_port_list,  opts.config)
+    check_pinger(pri_port_list, sec_port_list, memc_port_list, opts.ex_list, opts.config)
 
 if opts.type == 'octopus_crc':
     ### Make stuff
