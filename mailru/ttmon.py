@@ -60,7 +60,7 @@ general_dict = {'show slab': ['items_used', 'arena_used'],
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
-isEL6 = version_info[0] = 2 and version_info[1] >= 6
+isEL6 = version_info[0] == 2 and version_info[1] >= 6
 
 ### Functions
 
