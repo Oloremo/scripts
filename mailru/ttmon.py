@@ -60,12 +60,7 @@ general_dict = {'show slab': ['items_used', 'arena_used'],
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
-if version_info[1] >= 6:
-    ### Python 2.6
-    isEL6 = True
-else:
-    ### Python 2.4
-    isEL6 = False
+isEL6 = version_info[0] = 2 and version_info[1] >= 6
 
 ### Functions
 
@@ -341,14 +336,11 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
 def check_init_vs_chk(init_list, chkcfg_list):
     """ Check init scripts vs chkconfig """
 
-    if not init_list:
-        yield "Octopus/Tarantool init scripts not found!"
-    else:
-        for init in init_list:
-            if init != 'octopus' and init != 'tarantool_box' and 'wrapper' not in init:
-                p = re.compile(r'^%s\s+.*3:on.*' % init)
-                if not filter(p.match, chkcfg_list):
-                    yield 'Init script "%s" is not added to chkconfig!' % init
+    for init in init_list:
+        if init != 'octopus' and init != 'tarantool_box' and 'wrapper' not in init:
+            p = re.compile(r'^%s\s+.*3:on.*' % init)
+            if not filter(p.match, chkcfg_list):
+                yield 'Init script "%s" is not added to chkconfig!' % init
 
 def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=False):
     """ Main infrastructure check """
