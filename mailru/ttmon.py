@@ -50,6 +50,7 @@ elif opts.type == 'repl':
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
 cfg_excl_re = 'tarantool.*feeder.*.cfg$'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
+init_exl_list = ['tarantool_opengraph_feeder', 'tarantool_opengraph', 'octopus', 'octopus-colander', 'tarantool', 'tarantool_box', 'tarantool-initd-wrapper']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 sock_timeout = 0.1
@@ -333,11 +334,11 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
         else:
             yield "Octopus/Tarantool with admin port %s runs on error: Can't get config from process." % proc['aport']
 
-def check_init_vs_chk(init_list, chkcfg_list):
+def check_init_vs_chk(init_list, chkcfg_list, init_exl_list):
     """ Check init scripts vs chkconfig """
 
     for init in init_list:
-        if init != 'octopus' and init != 'tarantool_box' and 'wrapper' not in init:
+        if init not in init_exl_list:
             p = re.compile(r'^%s\s+.*3:on.*' % init)
             if not filter(p.match, chkcfg_list):
                 yield 'Init script "%s" is not added to chkconfig!' % init
@@ -356,7 +357,7 @@ def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=Fal
                 errors_list.append(alert)
 
     if infr_ivc:
-        for alert in check_init_vs_chk(init_list, chkcfg_list):
+        for alert in check_init_vs_chk(init_list, chkcfg_list, init_exl_list):
                 errors_list.append(alert)
 
     if errors_list:
