@@ -5,12 +5,13 @@ import subprocess          # for "ps aux"
 import re                  # for regexps
 from glob import glob      # for fs file paths
 from sys import exit, stdout, version_info      # for exit code, output func and version check
-from os import chdir       # for glob()
+from os import chdir, readlink      # for glob()
 from select import select  # for socket reading
 from optparse import OptionParser, OptionGroup  # for options parser
-from os.path import isfile  # for OS file check
+from os.path import isfile, islink  # for OS file check
 import errno                # for exeption handling
 import MySQLdb              # for mysql
+from netifaces import interfaces, ifaddresses  # for ip detection
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
@@ -50,7 +51,7 @@ elif opts.type == 'repl':
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
 cfg_excl_re = 'tarantool.*feeder.*.cfg$'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
-init_exl_list = ['tarantool_opengraph_feeder', 'tarantool_opengraph', 'octopus', 'octopus-colander', 'tarantool', 'tarantool_box', 'tarantool-initd-wrapper']
+init_exl_list = ['*.rpmsave', 'tarantool_opengraph_feeder', 'tarantool_opengraph', 'octopus', 'octopus-colander', 'tarantool', 'tarantool_box', 'tarantool-initd-wrapper']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 sock_timeout = 0.1
@@ -238,7 +239,7 @@ def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
 
     return adm_dict_loc
 
-def make_paths_list(paths, excl_pattern, basename=False):
+def make_paths_list(paths, excl_pattern, basename=False,):
     """ Make a list with paths to files. Full path to cfg and just basename for init scripts """
 
     paths_list_loc = []
@@ -255,6 +256,7 @@ def make_paths_list(paths, excl_pattern, basename=False):
                             paths_list_loc.extend(glob(path))
 
     paths_list_loc = [item for item in paths_list_loc if not p.findall(item)]
+
     return paths_list_loc
 
 def make_tt_proc_list(pattern):
@@ -336,6 +338,13 @@ def check_proc_vs_cfg(proc_dict, cfg_dict):
 
 def check_init_vs_chk(init_list, chkcfg_list, init_exl_list):
     """ Check init scripts vs chkconfig """
+
+    good_init_set = set('')
+    for init in init_list:
+        if islink('/etc/init.d/' + init):
+            good_init_set.add(readlink('/etc/init.d/' + init).split('/')[3])
+
+    init_exl_list.extend(list(good_init_set))
 
     for init in init_list:
         if init not in init_exl_list:
@@ -430,21 +439,19 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
         exit(3)
 
 def getip():
-    """ Returns ip of this server """
+    """ Returns list of ips of this server """
 
-    p = re.compile('mail.ru$')
-    p2 = re.compile('i.mail.ru$')
-    hostname = socket.gethostname()
+    ip_list = []
+    for interface in interfaces():
+        if 2 in ifaddresses(interface):
+            if ifaddresses(interface)[2][0]['addr'].startswith('10.'):
+                ip_list.append(ifaddresses(interface)[2][0]['addr'])
 
-    ### Strip ext part of domain name if exist
-    if p2.findall(hostname):
-        hostname = hostname.rstrip('.mail.ru')
-    elif p.findall(hostname):
-        hostname = hostname.rstrip('mail.ru')
-        hostname += '.i'
-    ipaddr = socket.gethostbyname(hostname)
-
-    return ipaddr
+    if not ip_list:
+        output("Can't get server ip list. Check me.")
+        exit(1)
+    else:
+        return ip_list
 
 def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='/etc/ttmon.conf'):
     """ Check if octopus\tt on this host is in pinger database """
@@ -452,7 +459,7 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='
     conf_dict = {}
     pinger_list = []
     port_set = set('')
-    ip = getip()
+    ip_list = getip()
 
     ### Open conf file and make a dict from it
     try:
@@ -481,10 +488,11 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='
     try:
         db = MySQLdb.connect(host=conf_dict['host'], user=conf_dict['user'], passwd=conf_dict['pass'], db=conf_dict['db'])
         cur = db.cursor()
-        for port in port_set:
-            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ip, port))
-            if int(cur.rowcount) is 0:
-                pinger_list.append('Octopus/Tarantool with port %s not found in pinger database!' % port)
+        for ip in ip_list:
+            for port in port_set:
+                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ip, port))
+                if int(cur.rowcount) is 0:
+                    pinger_list.append('Octopus/Tarantool with ip:port %s:%s not found in pinger database!' % (ip, port))
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
