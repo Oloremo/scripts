@@ -340,9 +340,11 @@ def check_init_vs_chk(init_list, chkcfg_list, init_exl_list):
     """ Check init scripts vs chkconfig """
 
     good_init_set = set('')
+
+    chdir('/etc/init.d/')
     for init in init_list:
-        if islink('/etc/init.d/' + init):
-            good_init_set.add(readlink('/etc/init.d/' + init).split('/')[3])
+        if islink(init):
+            good_init_set.add(readlink(init))
 
     init_exl_list.extend(list(good_init_set))
 
