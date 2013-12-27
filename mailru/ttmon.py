@@ -344,8 +344,8 @@ def check_init_vs_chk(init_list, chkcfg_list, init_exl_list):
     chdir('/etc/init.d/')
     for init in init_list:
         if islink(init):
-            good_init_set.add(readlink(init))
-
+            good_init_set.add(readlink(init).split('/')[-1])
+            
     init_exl_list.extend(list(good_init_set))
 
     for init in init_list:
