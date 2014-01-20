@@ -5,6 +5,7 @@ from math import ceil                       # for rounding
 from sys import exit, stdout, version_info  # for exit code, output func and version check
 from os.path import isfile                  # for OS file check
 from optparse import OptionParser           # for usage
+import simplejson as json                   # for config import
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-x EXCLUDE]"
@@ -29,10 +30,13 @@ if opts.warn_limit and opts.warn_limit <= opts.crit_limit:
 if opts.type == 'pct':
         if not opts.crit_limit:
                 opts.crit_limit = 20
+        if not opts.warn_limit:
+                opts.warn_limit = False
 elif opts.type == 'space':
         if not opts.crit_limit:
                 opts.crit_limit = 5000
-
+        if not opts.warn_limit:
+                opts.warn_limit = False
 
 ### Assign global variables
 fs_type_list = ['ext2', 'ext3', 'ext4', 'xfs']
@@ -106,23 +110,58 @@ def bytes2mb(num):
         num /= 1024.0
     return int(num)
 
+def make_config(config_file, crit, warn, mounts):
+    conf_dict = {}
+    ### Default dict
+    for mount in mounts:
+        if warn:
+            conf_dict[mount] = {'crit': int(crit), 'warn': int(warn), 'type': '%'}
+        else:
+            conf_dict[mount] = {'crit': int(crit), 'warn': False, 'type': '%'}
+
+    ### If there is no conf file we return defaults
+    if not isfile(opts.config):
+        return conf_dict
+    try:
+        ### Make dict from conf file
+        conf_dict_file = json.load(open(opts.config))
+        conf_dict.update(conf_dict_file)
+    except Exception, err:
+        if 'IO_ERROR' in err:
+            print err
+            exit(1)
+        else:
+            output("Unhandled exeption. Check me.")
+            print err
+            exit(1)
+
+    for k, v in conf_dict.items():
+        if v['type'] == '%' and (v['warn'] and v['warn'] not in xrange(1, 100) or v['crit'] not in xrange(1, 100)):
+            output('Config error. "%s" partition limits not in range of 1-100. Config: %s' % (k, config_file))
+            exit(1)
+        elif v['type'].lower() == 'm' and (v['warn'] and v['warn'] < 1 or v['crit'] < 1):
+            output('Config error. "%s" partition limits is less than 1Mb. Sounds wierd... Config: %s' % (k, config_file))
+            exit(1)
+
+    return conf_dict
+
 def check_space(mounts_dict, conf_dict, check='pct'):
 
     result_critical = []
     result_warning = []
 
     for mount in mounts_dict.keys():
-        if check == 'pct' and conf_dict[mount][2] == '%':
-            if mounts_dict[mount]['pct_free'] <= conf_dict[mount][1]:
-                result_critical.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount][1], mounts_dict[mount]['pct_used']))
-            elif conf_dict[mount][0] and mounts_dict[mount]['pct_free'] <= conf_dict[mount][0]:
-                result_warning.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount][0], mounts_dict[mount]['pct_used']))
+        if check == 'pct' and conf_dict[mount]['type'] == '%':
+            if mounts_dict[mount]['pct_free'] <= conf_dict[mount]['crit']:
+                result_critical.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['crit'], mounts_dict[mount]['pct_used']))
+            elif conf_dict[mount]['warn'] and mounts_dict[mount]['pct_free'] <= conf_dict[mount]['warn']:
+                result_warning.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['warn'], mounts_dict[mount]['pct_used']))
 
-        if check == 'space' and conf_dict[mount][2] == 'm':
-            if mounts_dict[mount]['free'] <= conf_dict[mount][1]:
-                result_critical.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount][1], mounts_dict[mount]['free']))
-            elif conf_dict[mount][0] and mounts_dict[mount]['free'] <= conf_dict[mount][0]:
-                result_warning.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount][0], mounts_dict[mount]['free']))
+        if check == 'space' and conf_dict[mount][type] == 'm':
+            if mounts_dict[mount]['free'] <= conf_dict[mount]['crit']:
+                result_critical.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['crit'], mounts_dict[mount]['free']))
+            elif conf_dict[mount]['warn'] and mounts_dict[mount]['free'] <= conf_dict[mount]['warn']:
+                result_warning.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['warn'], mounts_dict[mount]['free']))
 
 ### Depending on situation it prints revelant list filled with alert strings
     if result_critical and result_warning:
@@ -135,43 +174,6 @@ def check_space(mounts_dict, conf_dict, check='pct'):
     elif result_warning:
         print_list(result_warning)
         exit(2)
-
-def make_config(config_file, crit, warn, mounts):
-    conf_dict = {}
-
-    ### If there is no conf file we use defaults
-    if not isfile(opts.config):
-        for mount in mounts:
-            ### Becouse python 2.4 does'n have ternary operator I have to use this shit(condition and true or false)
-            conf_dict[mount] = tuple([int(warn) and int(warn) or False, int(crit), '%'])
-        return conf_dict
-    try:
-        ### Make dict from conf file
-        for mount in mounts:
-            conf_dict[mount] = tuple([int(warn) and int(warn) or False, int(crit), '%'])
-        for line in open_file(opts.config):
-            line = line.strip()
-            if line and not line.startswith("#"):
-                (key, warn, crit, type) = line.split()
-                conf_dict[key.rstrip(':')] = tuple([int(warn), int(crit), type])
-    except Exception, err:
-        if 'IO_ERROR' in err:
-            print err
-            exit(1)
-        else:
-            output("Unhandled exeption. Check me.")
-            print err
-            exit(1)
-
-    for k, v in conf_dict.items():
-        if v[2].strip() == '%' and (v[0] and v[0] not in xrange(1, 100) or v[1] not in xrange(1, 100)):
-            output('Config error. "%s" partition limits not in range of 1-100. Config: %s' % (k, config_file))
-            exit(1)
-        elif v[2].lower().strip() == 'm' and (v[0] < 1 or v[1] < 1):
-            output('Config error. "%s" partition limits is less than 1Mb. Sounds wierd... Config: %s' % (k, config_file))
-            exit(1)
-
-    return conf_dict
 
 ### Work
 mounts = get_all_mounts(fs_type_list, ex_list)
