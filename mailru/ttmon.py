@@ -345,7 +345,7 @@ def check_init_vs_chk(init_list, chkcfg_list, init_exl_list):
     for init in init_list:
         if islink(init):
             good_init_set.add(readlink(init).split('/')[-1])
-            
+
     init_exl_list.extend(list(good_init_set))
 
     for init in init_list:
@@ -446,7 +446,7 @@ def getip():
     ip_list = []
     for interface in interfaces():
         if 2 in ifaddresses(interface):
-            if ifaddresses(interface)[2][0]['addr'].startswith('10.'):
+            if ifaddresses(interface)[2][0]['addr'].startswith('10.') and not ifaddresses(interface)[2][0]['addr'].startswith('10.34'):
                 ip_list.append(ifaddresses(interface)[2][0]['addr'])
 
     if not ip_list:
