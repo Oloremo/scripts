@@ -525,7 +525,7 @@ def check_crc(adm_port_list, proc_dict, crc_lag_limit=2220):
 if opts.type == 'infr_cvp':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     cfg_list = make_paths_list(cfg_paths_list, cfg_excl_re)
     cfg_dict = make_cfg_dict(cfg_list)
 
@@ -535,7 +535,7 @@ if opts.type == 'infr_cvp':
 if opts.type == 'infr_pvc':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     cfg_list = make_paths_list(cfg_paths_list, cfg_excl_re)
     cfg_dict = make_cfg_dict(cfg_list)
     proc_dict = make_proc_dict(adm_port_list, general_dict)
@@ -554,7 +554,7 @@ if opts.type == 'infr_ivc':
 if opts.type == 'slab':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
@@ -563,7 +563,7 @@ if opts.type == 'slab':
 if opts.type == 'repl':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
@@ -572,9 +572,9 @@ if opts.type == 'repl':
 if opts.type == 'pinger':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
-    sec_port_list = make_port_list(tt_proc_list, ' sec:.*\d+')
-    pri_port_list = make_port_list(tt_proc_list, ' pri:.*\d+')
-    memc_port_list = make_port_list(tt_proc_list, ' memc:.*\d+')
+    sec_port_list = make_port_list(tt_proc_list, ' sec:\s*\d+')
+    pri_port_list = make_port_list(tt_proc_list, ' pri:\s*\d+')
+    memc_port_list = make_port_list(tt_proc_list, ' memc:\s*\d+')
 
     ### Check stuff
     check_pinger(pri_port_list, sec_port_list, memc_port_list, opts.ex_list, opts.config)
@@ -582,7 +582,7 @@ if opts.type == 'pinger':
 if opts.type == 'octopus_crc':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(octopus_repl_pattern)
-    adm_port_list = make_port_list(tt_proc_list, ' adm:.*\d+')
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     proc_dict = make_proc_dict(adm_port_list, crc_check_dict)
 
     ### Check stuff
