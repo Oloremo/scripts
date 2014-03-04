@@ -15,8 +15,8 @@ usage = "usage: %prog -t TYPE [-c LIMIT]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                 choices=['ok', 'repl', 'load'],
-                 help='Check type. Chose from "ok", "repl", "load"')
+                  choices=['ok', 'repl', 'load'],
+                  help='Check type. Chose from "ok", "repl", "load"')
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
                   help="Critical limit. Default: 100 for 'load' and 600 for 'repl'")
 
@@ -27,7 +27,7 @@ if opts.type == 'load':
                 opts.crit_limit = 100
 elif opts.type == 'repl':
         if not opts.crit_limit:
-                opts.crit_limit = 600
+                opts.crit_limit = 300
 
 ### Global vars
 mysql_init_path = ['mysql-*']
@@ -39,18 +39,12 @@ if not isfile(bk_log):
 else:
     cut_time = time.time()
     bk_mtime = os.path.getmtime(bk_log)
-    if cut_time - bk_mtime > 600:
+    if cut_time - bk_mtime > 200:
         is_backup = False
     else:
         is_backup = True
 
-### Version check
-if version_info[1] >= 6:
-    ### Python 2.6
-    isEL6 = True
-else:
-    ### Python 2.4
-    isEL6 = False
+isEL6 = version_info[0] == 2 and version_info[1] >= 6
 
 ### Functions
 
