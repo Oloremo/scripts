@@ -47,6 +47,9 @@ elif opts.type == 'repl':
         if not opts.info_limit:
                 opts.info_limit = 1
 
+### FIXME
+waste_limit = 50
+
 ### Global vars
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
 cfg_excl_re = 'tarantool.*feeder.*.cfg$'
@@ -56,7 +59,7 @@ proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 sock_timeout = 0.1
 crc_lag_limit = 2220
-general_dict = {'show slab': ['items_used', 'arena_used'],
+general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
                 'show info': ['recovery_lag', 'config'],
                 'show configuration': ['primary_port']}
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
@@ -146,6 +149,7 @@ def get_stats(sock, lookup_dict, timeout=0.1, recv_buffer=262144):
         for arg in list:
                 args_dict[arg] = ''
     args_dict['recovery_lag'] = 0
+    args_dict['waste'] = 0
     args_dict['check_error'] = ''
 
     for command in lookup_dict.keys():
@@ -217,6 +221,7 @@ def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
             filters = {
                 'items_used': lambda x: int(str(x).rsplit('.')[0]),
                 'arena_used': lambda x: int(str(x).rsplit('.')[0]),
+                'waste': lambda x: int(str(x).rsplit('.')[0]),
                 'recovery_lag': lambda x: int(str(x).rsplit('.')[0]),
                 'recovery_run_crc_lag': lambda x: int(str(x).rsplit('.')[0]),
                 'config': lambda x: x.strip(' "'),
@@ -410,6 +415,7 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
 
                 items_used = proc_dict[proc]['items_used']
                 arena_used = proc_dict[proc]['arena_used']
+                waste = proc_dict[proc]['waste']
 
                 if items_used >= crit:
                         result_critical.append(print_alert('items_used', items_used, crit, aport, error))
@@ -424,6 +430,9 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
                         result_warning.append(print_alert('arena_used', arena_used, warn, aport, error))
                 elif arena_used >= info:
                         result_info.append(print_alert('arena_used', arena_used, info, aport, error))
+
+                if waste >= waste_limit:
+                        result_info.append(print_alert('waste', waste, waste_limit, aport, error))
 
     ### Depending on situation it prints revelant list filled with alert strings
     if result_critical and result_warning:
