@@ -11,7 +11,7 @@ import os.path                              # for mtime check
 import time                                 # for mtime check
 
 ### Gotta catch 'em all!
-usage = "usage: %prog -t TYPE [-c LIMIT]"
+usage = "usage: %prog -t TYPE [-c LIMIT] [-f FLAG]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
@@ -19,6 +19,8 @@ parser.add_option('-t', '--type', type='choice', action='store', dest='type',
                   help='Check type. Chose from "ok", "repl", "load"')
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
                   help="Critical limit. Default: 100 for 'load' and 600 for 'repl'")
+parser.add_option("-f", "--flag", type="str", dest="flag", action="store", default=False,
+                  help="Flag file, created while backup running. We don't check anything while it exist.")
 
 (opts, args) = parser.parse_args()
 
@@ -27,24 +29,34 @@ if opts.type == 'load':
                 opts.crit_limit = 100
 elif opts.type == 'repl':
         if not opts.crit_limit:
-                opts.crit_limit = 300
+                opts.crit_limit = 600
 
 ### Global vars
 mysql_init_path = ['mysql-*']
 lookup_list = ['datadir', 'socket']
-bk_log = '/var/tmp/mysql-backup.error'
 
-if not isfile(bk_log):
-    is_backup = False
+
+### Version check
+if version_info[1] >= 6:
+    ### Python 2.6
+    isEL6 = True
 else:
-    cut_time = time.time()
-    bk_mtime = os.path.getmtime(bk_log)
-    if cut_time - bk_mtime > 200:
+    ### Python 2.4
+    isEL6 = False
+
+### Flag check
+if opts.flag:
+    if not isfile(opts.flag):
         is_backup = False
     else:
         is_backup = True
-
-isEL6 = version_info[0] == 2 and version_info[1] >= 6
+        cut_time = time.time()
+        bk_mtime = os.path.getmtime(opts.flag)
+        if cut_time - bk_mtime > 3600:
+            print "Stale backup flag found! %s is older than 60 min." % opts.flag
+            exit(2)
+else:
+    is_backup = False
 
 ### Functions
 
