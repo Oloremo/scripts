@@ -167,6 +167,9 @@ def check_space(mounts_dict, conf_dict):
             elif conf_dict[mount]['warn'] and mounts_dict[mount]['free'] <= conf_dict[mount]['warn']:
                 result_warning.append('%s: less than %sMb free (= %sMb)' % (mount, conf_dict[mount]['warn'], mounts_dict[mount]['free']))
 
+        if conf_dict[mount]['type'] not in ['ignored', '%', 'm']:
+            output("Mount point %s in config file %s has wrong type - '%s'. Valid types are: 'ignored', '%%' and 'm'." % (mount, opts.config, conf_dict[mount]['type']))
+
 ### Depending on situation it prints revelant list filled with alert strings
     if result_critical and result_warning:
         print_list(result_critical)
