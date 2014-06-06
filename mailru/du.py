@@ -94,6 +94,8 @@ def get_fs_stat(mount):
     dict['used'] = float((st.f_blocks - st.f_bfree) * st.f_frsize)
     dict['pct_used'] = int(ceil((100 * dict['used']) / (dict['used'] + dict['free'])))
     dict['pct_free'] = 100 - dict['pct_used']
+    dict['free'] = bytes2mb(dict['free'])
+    dict['used'] = bytes2mb(dict['used'])
 
     return dict
 
@@ -136,8 +138,8 @@ def make_config(config_file, crit, warn, mounts):
             exit(1)
 
     for k, v in conf_dict.items():
-        if v['type'] == '%' and (v['warn'] and v['warn'] not in xrange(1, 100) or v['crit'] not in xrange(1, 100)):
-            output('Config error. "%s" partition limits not in range of 1-100. Config: %s' % (k, config_file))
+        if v['type'] == '%' and (v['warn'] and v['warn'] not in xrange(0, 100) or v['crit'] not in xrange(0, 100)):
+            output('Config error. "%s" partition limits not in range of 0-100. Config: %s' % (k, config_file))
             exit(1)
         elif v['type'].lower() == 'm' and (v['warn'] and v['warn'] < 1 or v['crit'] < 1):
             output('Config error. "%s" partition limits is less than 1Mb. Sounds wierd... Config: %s' % (k, config_file))
@@ -145,23 +147,25 @@ def make_config(config_file, crit, warn, mounts):
 
     return conf_dict
 
-def check_space(mounts_dict, conf_dict, check='pct'):
+def check_space(mounts_dict, conf_dict):
 
     result_critical = []
     result_warning = []
 
     for mount in mounts_dict.keys():
-        if check == 'pct' and conf_dict[mount]['type'] == '%':
+        if conf_dict[mount]['type'] == 'ignored':
+            continue
+        if conf_dict[mount]['type'] == '%':
             if mounts_dict[mount]['pct_free'] <= conf_dict[mount]['crit']:
                 result_critical.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['crit'], mounts_dict[mount]['pct_used']))
             elif conf_dict[mount]['warn'] and mounts_dict[mount]['pct_free'] <= conf_dict[mount]['warn']:
                 result_warning.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['warn'], mounts_dict[mount]['pct_used']))
 
-        if check == 'space' and conf_dict[mount][type] == 'm':
+        if conf_dict[mount]['type'] == 'm':
             if mounts_dict[mount]['free'] <= conf_dict[mount]['crit']:
-                result_critical.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['crit'], mounts_dict[mount]['free']))
+                result_critical.append('%s: less than %sMb free (= %sMb)' % (mount, conf_dict[mount]['crit'], mounts_dict[mount]['free']))
             elif conf_dict[mount]['warn'] and mounts_dict[mount]['free'] <= conf_dict[mount]['warn']:
-                result_warning.append('%s: less than %s%% free (= %s%%)' % (mount, conf_dict[mount]['warn'], mounts_dict[mount]['free']))
+                result_warning.append('%s: less than %sMb free (= %sMb)' % (mount, conf_dict[mount]['warn'], mounts_dict[mount]['free']))
 
 ### Depending on situation it prints revelant list filled with alert strings
     if result_critical and result_warning:
@@ -179,8 +183,4 @@ def check_space(mounts_dict, conf_dict, check='pct'):
 mounts = get_all_mounts(fs_type_list, ex_list)
 mounts_dict = make_mounts_dict(mounts)
 conf_dict = make_config(opts.config, opts.crit_limit, opts.warn_limit, mounts)
-
-if opts.type == 'pct':
-    check_space(mounts_dict, conf_dict)
-elif opts.type == 'space':
-    check_space(mounts_dict, conf_dict, check='space')
+check_space(mounts_dict, conf_dict)
