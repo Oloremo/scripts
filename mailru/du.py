@@ -8,7 +8,7 @@ from optparse import OptionParser           # for usage
 import simplejson as json                   # for config import
 
 ### Gotta catch 'em all!
-usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-x EXCLUDE]"
+usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-x EXCLUDE] [-a APPEND] [--conf path/to/config]"
 parser = OptionParser(usage=usage)
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
                   help="Critical limit. Default: 20% for 'pct' and 5000Mb for 'space'")
