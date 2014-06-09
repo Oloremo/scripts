@@ -575,7 +575,7 @@ if opts.type == 'slab':
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
-    check_stats(adm_port_list, proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit)
+    check_stats(proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit)
 
 if opts.type == 'repl':
     ### Make stuff
