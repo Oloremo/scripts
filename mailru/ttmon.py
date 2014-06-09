@@ -48,7 +48,7 @@ elif opts.type == 'repl':
                 opts.info_limit = 1
 
 ### FIXME
-waste_limit = 50
+waste_limit = 30
 
 ### Global vars
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
@@ -57,10 +57,11 @@ init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 init_exl_list = ['*.rpmsave', 'tarantool_opengraph_feeder', 'tarantool_opengraph', 'octopus', 'octopus-colander', 'tarantool', 'tarantool_box', 'tarantool-initd-wrapper']
 proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
+repl_fail_status = ['/fail:', '/failed']
 sock_timeout = 0.1
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
-                'show info': ['recovery_lag', 'config'],
+                'show info': ['recovery_lag', 'config', 'status'],
                 'show configuration': ['primary_port']}
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
@@ -168,7 +169,7 @@ def get_stats(sock, lookup_dict, timeout=0.1, recv_buffer=262144):
         got = 0
         for line in read_socket(sock, timeout):
             if got < need:
-                line = line.strip().split(':', -1)
+                line = line.strip().split(':', 1)
                 if line[0] in args_set or line[0] == 'check_error':
                     args_dict[line[0]] = line[1]
                     got += 1
@@ -380,12 +381,13 @@ def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=Fal
             print_list(errors_list)
             exit(exit_code)
 
-def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
+def check_stats(proc_dict, crit, warn, info, check_repl=False):
     """ Check stats from proccess against limits """
 
     result_critical = []
     result_warning = []
     result_info = []
+    repl_problems = []
 
     for proc in proc_dict.keys():
         aport = proc_dict[proc]['aport']
@@ -398,6 +400,9 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
         if check_repl:
                 rep_lag = proc_dict[proc]['recovery_lag']
 
+                if any(word in proc_dict[aport]['status'] for word in repl_fail_status):
+                    repl_problems.append("Octopus with admin port %s. Replication can't connect to master. Status is '%s'" % (aport, proc_dict[aport]['status']))
+
                 if rep_lag == '':
                     result_critical.append(print_alert('', '', '', aport, "Can't get replication lag info. Check me."))
                     continue
@@ -408,6 +413,7 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
                         result_warning.append(print_alert('replication_lag', rep_lag, warn, aport, error))
                 elif rep_lag >= info:
                         result_info.append(print_alert('replication_lag', rep_lag, info, aport, error))
+
         else:
                 if proc_dict[proc]['items_used'] == '' or proc_dict[proc]['arena_used'] == '':
                     result_critical.append(print_alert('', '', '', aport, 'Cant get items_used or arena_used from process.'))
@@ -435,11 +441,13 @@ def check_stats(adm_port_list, proc_dict, crit, warn, info, check_repl=False):
                         result_info.append(print_alert('waste', waste, waste_limit, aport, error))
 
     ### Depending on situation it prints revelant list filled with alert strings
-    if result_critical and result_warning:
+    if (result_critical or repl_problems) and result_warning:
+        print_list(repl_problems)
         print_list(result_critical)
         print_list(result_warning)
         exit(1)
-    elif result_critical and not result_warning:
+    elif (result_critical or repl_problems) and not result_warning:
+        print_list(repl_problems)
         print_list(result_critical)
         exit(1)
     elif result_warning:
@@ -576,7 +584,7 @@ if opts.type == 'repl':
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
-    check_stats(adm_port_list, proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit, check_repl=True)
+    check_stats(proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit, check_repl=True)
 
 if opts.type == 'pinger':
     ### Make stuff
