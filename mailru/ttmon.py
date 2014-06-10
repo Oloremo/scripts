@@ -400,7 +400,7 @@ def check_stats(proc_dict, crit, warn, info, check_repl=False):
         if check_repl:
                 rep_lag = proc_dict[proc]['recovery_lag']
 
-                if any(word in proc_dict[aport]['status'] for word in repl_fail_status):
+                if [word for word in repl_fail_status if word in proc_dict[aport]['status']]:
                     repl_problems.append("Octopus with admin port %s. Replication can't connect to master. Status is '%s'" % (aport, proc_dict[aport]['status']))
 
                 if rep_lag == '':
