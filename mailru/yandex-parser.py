@@ -84,6 +84,8 @@ def make_conf(good_ip, nginx_ip_file):
             exit(1)
 
 ipset = make_ipset(logfile)
+if not ipset:
+    exit(0)
 host_ip_dict = make_host_ip_dict(ipset)
 good_ip = check_ip(host_ip_dict)
 make_conf(good_ip, nginx_ip_file)
