@@ -71,17 +71,7 @@ class Daemon:
                 Start the daemon
                 """
                 # Check for a pidfile to see if the daemon already runs
-                try:
-                        pf = file(self.pidfile, 'r')
-                        pid = int(pf.read().strip())
-                        pf.close()
-                except IOError:
-                        pid = None
-
-                if pid:
-                        message = "pidfile %s already exist. Daemon already running?\n"
-                        sys.stderr.write(message % self.pidfile)
-                        sys.exit(1)
+                self.status()
 
                 # Start the daemon
                 self.daemonize()
@@ -117,6 +107,35 @@ class Daemon:
                         else:
                                 print str(err)
                                 sys.exit(1)
+
+        def check_pid_is_exist(self, pid):
+                try:
+                        os.kill(pid, 0)
+                        return True
+                except OSError:
+                        return False
+
+        def status(self):
+                """
+                Check daemon status
+                """
+                # Check for a pidfile to see if the daemon already runs
+                try:
+                        pf = file(self.pidfile, 'r')
+                        pid = int(pf.read().strip())
+                        pf.close()
+                except Exception:
+                        pid = None
+
+                if pid:
+                        if self.check_pid_is_exist(pid):
+                            message = "pidfile %s already exist and pid is alive. Daemon already running?\n"
+                            sys.stderr.write(message % self.pidfile)
+                            sys.exit(0)
+                        else:
+                            message = "pidfile %s already exist but pid is dead. Stale pidfile?\n"
+                            sys.stderr.write(message % self.pidfile)
+                            sys.exit(2)
 
         def restart(self):
                 """
