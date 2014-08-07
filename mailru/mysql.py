@@ -5,7 +5,7 @@ from optparse import OptionParser           # for usage
 from glob import glob                       # for fs file paths
 from os.path import isfile                  # for OS file check
 import MySQLdb                              # for mysql
-from os import chdir                        # for glob()
+from os import chdir, stat                  # for glob()
 import socket                               # for network
 import os.path                              # for mtime check
 import time                                 # for mtime check
@@ -35,14 +35,8 @@ elif opts.type == 'repl':
 mysql_init_path = ['mysql-*']
 lookup_list = ['datadir', 'socket']
 
-
 ### Version check
-if version_info[1] >= 6:
-    ### Python 2.6
-    isEL6 = True
-else:
-    ### Python 2.4
-    isEL6 = False
+isEL6 = version_info[0] == 2 and version_info[1] >= 6
 
 ### Flag check
 if opts.flag:
@@ -124,9 +118,13 @@ def check_ok(mysql_dict):
 
     for inst in mysql_dict.keys():
         chdir(mysql_dict[inst]['datadir'])
-        file = open_file(hostname + '.err')
-        if file[-1].strip() != 'OK':
-            result.append('Mysql with datadir "%s" has problems: %s' % (mysql_dict[inst]['datadir'], file[-1].strip()))
+        filename = hostname + '.err'
+        if isfile(filename) and stat(filename).st_size != 0:
+            file = open_file(filename)
+            if file[-1].strip() != 'OK':
+                result.append('Mysql with datadir "%s" has problems: %s' % (mysql_dict[inst]['datadir'], file[-1].strip()))
+        else:
+            result.append('Mysql with datadir "%s" has problems: Cant open\empty err file as %s' % (mysql_dict[inst]['datadir'], filename))
 
     if result:
         print_list(result)
