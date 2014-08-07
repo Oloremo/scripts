@@ -49,7 +49,7 @@ case "$1" in
         restart
         ;;
   status)
-        rhstatus
+        status
         ;;
   *)
         echo $"Usage: $0 {start|stop|status|restart}"
