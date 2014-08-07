@@ -13,20 +13,24 @@ from daemon import Daemon
 ### Gotta catch 'em all!
 usage = "usage: %prog [--const path/to/file] [--log path/to/log] [--error_file path/to/file] [--log_level LEVEL] [-i INTERVAL] -a {start,stop,restart,status}"
 parser = OptionParser(usage=usage)
-parser.add_option("--const", type="str", dest="MYSQL_CONSTANTS", default="/usr/local/etc/mysql-status-constants.lst",
-                  help="File with list of mysql variables to check. Default: /usr/local/etc/mysql-status-constants.lst")
-parser.add_option("--log", type="str", dest="log_file", default="/var/log/mailru/mysql-status.log",
-                  help="Path to log file. Default: /var/log/mailru/mysql-status.log")
-parser.add_option("--error_log", type="str", dest="error_file", default="/var/tmp/mysql-status.err",
-                  help="Path to error log file. Default: /var/tmp/mysql-status.err")
+parser.add_option("--const", type="str", dest="MYSQL_CONSTANTS", default="/usr/local/etc/mysql2graphite-constants.lst",
+                  help="File with list of mysql variables to check. Default: /usr/local/etc/mysql2graphite-constants.lst")
+parser.add_option("--log", type="str", dest="log_file", default="/var/log/mailru/mysql2graphite.log",
+                  help="Path to log file. Default: /var/log/mailru/mysql2graphite.log")
+parser.add_option("--error_log", type="str", dest="error_file", default="/var/tmp/mysql2graphite.err",
+                  help="Path to error log file. Default: /var/tmp/mysql2graphite.err")
 parser.add_option('--log_level', type='choice', action='store', dest='loglevel', default='INFO',
-                  choices=['INFO', 'WARNING', 'CRITICAL', 'DEBUG'], help='Default log level. Choose from: INFO, WARNING, CRITICAL and DEBUG')
+                  choices=['INFO', 'WARNING', 'CRITICAL', 'DEBUG'], help='Log level. Choose from: INFO, WARNING, CRITICAL and DEBUG. Default is INFO')
 parser.add_option("-i", "--interval", type="int", dest="INTERVAL", default='300',
                   help="Check interval in seconds. Default: 300")
 parser.add_option('-a', '--action', type='choice', action='store', dest='action',
                   choices=['start', 'stop', 'restart', 'status'], help='Action triger: start, stop, restart or status')
 
 (opts, args) = parser.parse_args()
+
+if not opts.action:
+    print "Syntax error"
+    print usage
 
 ### Global vars
 log_file = opts.log_file
@@ -118,6 +122,8 @@ class MyDaemon(Daemon):
 
         for init in self.inits:
             mysql_args_dict = {}
+
+            mysql_args_dict['db'] = init.partition('-')[2]
             file = self.open_file(init)
             for line in file:
                 line = line.split('=')
@@ -178,13 +184,13 @@ class MyDaemon(Daemon):
             for key, value in stats.items():
                 self.logger.debug('%s = %s' % (key, value))
 
-    def send_data(self):
+    def send_data(self, instance):
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.logger.info('Sending data to graphite')
         for key in self.stats.keys():
-            self.logger.info('my.mysql.%s.%s %s %s' % (self.hostname, self.stats[key]['key'], self.stats[key]['value'], self.stats[key]['time']))
-            sock.sendto('my.mysql.%s.%s %s %s' % (self.hostname, self.stats[key]['key'], self.stats[key]['value'], self.stats[key]['time']), (CARBON_SERVER, CARBON_PORT))
+            self.logger.info('my.mysql.%s.%s.%s %s %s' % (self.hostname, self.mysql_dict[instance]['db'], self.stats[key]['key'], self.stats[key]['value'], self.stats[key]['time']))
+            sock.sendto('my.mysql.%s.%s.%s %s %s' % (self.hostname, self.mysql_dict[instance]['db'], self.stats[key]['key'], self.stats[key]['value'], self.stats[key]['time']), (CARBON_SERVER, CARBON_PORT))
 
     def run(self):
         self.init()
@@ -197,12 +203,12 @@ class MyDaemon(Daemon):
                 db = self.connect(self.mysql_dict[instance])
                 self.get_stats(db)
                 if not self.first_run:
-                    self.send_data()
+                    self.send_data(instance)
             self.logger.info('Sleeping for %s' % self.interval)
             time.sleep(self.interval)
 
 if __name__ == "__main__":
-        daemon = MyDaemon('/var/run/mysql-stats.pid', stdout=log_file, stderr=log_file)
+        daemon = MyDaemon('/var/run/mysql2graphite.py.pid', stdout=log_file, stderr='/dev/stderr')
         if opts.action == 'start':
             daemon.start()
             daemon.run()
@@ -210,3 +216,5 @@ if __name__ == "__main__":
             daemon.stop()
         elif opts.action == 'restart':
             daemon.restart()
+        elif opts.action == 'status':
+            daemon.status()
