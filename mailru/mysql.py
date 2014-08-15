@@ -101,7 +101,7 @@ def check_flag(mysql_dict):
     result_dict = {}
 
     for inst in mysql_dict.keys():
-        flag = '/var/tmp/mysql-backup-tmp-mysql-%s.sock.flag' % inst
+        flag = '/var/tmp/mysql-backup-tmp-%s.sock.flag' % inst
         result_dict[inst] = {'flag': False, 'stale': False, 'file': flag}
 
         if isfile(flag):
