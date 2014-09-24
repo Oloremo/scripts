@@ -181,7 +181,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
         print_list(result_critical)
         print_list(result_warning)
         exit(1)
-    elif result_critical and result_warning:
+    elif result_critical:
         print_list(result_critical)
         exit(1)
     elif result_warning:
