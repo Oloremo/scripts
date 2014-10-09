@@ -165,7 +165,6 @@ class TTCollector(diamond.collector.Collector):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.open_socket(sock, sock_timeout, host, aport)
             args_dict = self.get_stats(sock, lookup_dict, sock_timeout)
-            args_dict['aport'] = aport
             sock.close()
 
             filters = {
