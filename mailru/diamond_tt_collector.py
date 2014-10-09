@@ -36,7 +36,7 @@ class TTCollector(diamond.collector.Collector):
             metrics_dict[inst] = self.make_proc_dict(ints_conf_dict['aport'], general_dict)
             for item in metrics_dict[inst].keys():
                 if metrics_dict[inst][item] != '':
-                    self.publish(inst.replace('.', '_') + '.' + item, metrics_dict[inst][item])
+                    self.publish(inst.replace('.', '_') + '.' + item.replace('.', '_'), metrics_dict[inst][item])
                 else:
                     self.log.error("Cant get metric value for %s at instance %s" % (item, inst))
 
