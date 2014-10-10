@@ -151,7 +151,7 @@ class TTCollector(diamond.collector.Collector):
                 for line in self.read_socket(sock, timeout):
                     if 'rps' in line:
                         line = line.split()
-                        args_dict[line[0].strip(':')] = line[3]
+                        args_dict[line[0].strip(':')] = line[3].strip(',')
 
         sock.sendall('quit\n')
         return args_dict
