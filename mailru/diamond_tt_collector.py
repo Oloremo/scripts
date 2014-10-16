@@ -27,9 +27,15 @@ class TTCollector(diamond.collector.Collector):
         return config
 
     def collect(self):
-        instances = self.config.get('instances')
-
+        instances_orig = self.config.get('instances')
         metrics_dict = {}
+
+        if not isinstance(instances_orig, list):
+            instances = []
+            instances.append(instances_orig)
+        else:
+            instances = instances_orig
+
         for inst in instances:
             inst_conf_path = self.make_paths_list(cfg_paths_list, inst)
             ints_conf_dict = self.make_cfg_dict(inst_conf_path)
@@ -61,6 +67,8 @@ class TTCollector(diamond.collector.Collector):
 
         if len(paths_list_loc) > 1:
             self.log.error("Found more then one config for instance %s: %s" % (inst, paths_list_loc))
+        if len(paths_list_loc) == 0:
+            self.log.error("Can't find config for instance %s" % inst)
         return paths_list_loc[0]
 
     def make_cfg_dict(self, config):
