@@ -51,10 +51,8 @@ class TTCollector(diamond.collector.Collector):
 
         if not isfile(filename):
             self.log.error("I/O error. There is no '%s'. Check me." % filename)
-        try:
+        else:
             return list(open(filename))
-        except Exception, err:
-            self.log.exception(err)
 
     def make_paths_list(self, paths, inst):
         """ Make a list with paths to files. Full path to cfg and just basename for init scripts """
@@ -93,14 +91,8 @@ class TTCollector(diamond.collector.Collector):
     def open_socket(self, sock, timeout, host, port):
         """ We try to open socket here and catch nasty exeptions if we can't """
 
-        try:
-            sock.settimeout(timeout)
-            sock.connect((host, int(port)))
-            return True
-        except Exception, err:
-            self.log.exception(err)
-
-        return False
+        sock.settimeout(timeout)
+        sock.connect((host, int(port)))
 
     def read_socket(self, sock, timeout=1, recv_buffer=262144):
         """ Nice way to read from socket. We use select() for timeout and recv handling """
@@ -138,11 +130,8 @@ class TTCollector(diamond.collector.Collector):
         del args_dict['nonexist']
 
         for command in lookup_dict.keys():
-            try:
-                sock.sendall(command + '\n')
-                args_set = set(lookup_dict[command])
-            except socket.error, err:
-                self.log.exception(err)
+            sock.sendall(command + '\n')
+            args_set = set(lookup_dict[command])
 
             if command != 'show stat':
                 need = len(args_set)
@@ -190,7 +179,7 @@ class TTCollector(diamond.collector.Collector):
                     args_dict[key] = filters[key](args_dict[key])
 
             adm_dict_loc = args_dict
-        except Exception, err:
-            self.log.exception(err)
+        except Exception:
+            self.log.exception('Caught exeption while working with admin port %s' % aport)
 
         return adm_dict_loc
