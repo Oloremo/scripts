@@ -1,24 +1,25 @@
 #!/usr/bin/env python
 
-import socket              # for network
-import subprocess          # for "ps aux"
-import re                  # for regexps
-from glob import glob      # for fs file paths
-from sys import exit, stdout, version_info      # for exit code, output func and version check
-from os import chdir, readlink      # for glob()
-from select import select  # for socket reading
-from optparse import OptionParser, OptionGroup  # for options parser
-from os.path import isfile, islink  # for OS file check
-import errno                # for exeption handling
-import MySQLdb              # for mysql
-from netifaces import interfaces, ifaddresses  # for ip detection
+import socket
+import subprocess
+import re
+import errno
+import MySQLdb
+import simplejson as json
+from glob import glob
+from sys import exit, stdout, version_info
+from os import chdir, readlink
+from select import select
+from optparse import OptionParser, OptionGroup
+from os.path import isfile, islink
+from netifaces import interfaces, ifaddresses
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                  choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc'],
+                  choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc', 'backup'],
                   help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc"')
 
 group = OptionGroup(parser, "Ajusting limits")
@@ -27,7 +28,7 @@ group.add_option("-w", dest="warn_limit", type="int", help="Warning limit. Defau
 group.add_option("-i", dest="info_limit", type="int", help="Info limit. Defaults slab = 70. repl = 1")
 group.add_option("-x", type="str", action="append", dest="ex_list", help="Exclude list of ports. This ports won't be cheked by 'pinger' check.")
 group.add_option("--exit", dest="exit_code", type="int", default="3", help="Exit code for infrastructure monitoring. Default: 3(Info)")
-group.add_option("--conf", dest="config", type="str", default="/etc/ttmon.conf", help="Config file. Used in pinger check. Default: /etc/ttmon.conf")
+group.add_option("--conf", dest="config", type="str", default="/etc/ttmon.conf", help="Config file. Used in pinger and backup check. Default: /etc/ttmon.conf")
 parser.add_option_group(group)
 
 (opts, args) = parser.parse_args()
@@ -51,6 +52,7 @@ elif opts.type == 'repl':
 waste_limit = 30
 
 ### Global vars
+backup_conf = '/etc/ttmon-backup.conf'
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
 cfg_excl_re = 'tarantool.*feeder.*.cfg$'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
@@ -62,7 +64,7 @@ sock_timeout = 0.1
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
                 'show info': ['recovery_lag', 'config', 'status'],
-                'show configuration': ['primary_port']}
+                'show configuration': ['primary_port', 'work_dir']}
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
@@ -119,6 +121,13 @@ def open_socket(sock, timeout, host, port):
         raise Exception
         exit(1)
     return False
+
+def load_json(file):
+    if not isfile(file):
+        print "file %s not found." % file
+        exit(1)
+
+    return json.load(open(file))
 
 def read_socket(sock, timeout=1, recv_buffer=262144):
     """ Nice way to read from socket. We use select() for timeout and recv handling """
@@ -472,29 +481,28 @@ def getip():
     else:
         return ip_list
 
-def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='/etc/ttmon.conf'):
+def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config_file):
     """ Check if octopus\tt on this host is in pinger database """
 
-    conf_dict = {}
     pinger_list = []
     port_set = set('')
     ip_list = getip()
 
-    ### Open conf file and make a dict from it
     try:
-        for line in open_file(config):
-            line = line.strip()
-            if line and not line.startswith("#"):
-                (key, val) = line.split()
-                conf_dict[key.rstrip(':')] = val
+        config_dict = load_json(config_file)
     except Exception, err:
-        if 'NO_FILE' in err:
-            exit(2)
-        elif 'IO_ERROR' in err:
+        if 'IO_ERROR' in err:
+            print err
             exit(1)
         else:
             output("Unhandled exeption. Check me.")
+            print err
             exit(1)
+
+    if not config_dict['pinger']:
+        output('Cant load "pinger" key from config %s') % config_file
+    else:
+        config = config_dict['pinger']
 
     ### Make a set of ports
     for ports in pri_port_list, sec_port_list, memc_port_list:
@@ -505,7 +513,7 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
-        db = MySQLdb.connect(host=conf_dict['host'], user=conf_dict['user'], passwd=conf_dict['pass'], db=conf_dict['db'])
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
         for ip in ip_list:
             for port in port_set:
@@ -519,6 +527,57 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config='
 
     if pinger_list:
         print_list(pinger_list)
+        exit(2)
+
+def check_backup(proc_dict, config_file):
+
+    backup_fail_list = []
+
+    try:
+        config_dict = load_json(config_file)
+    except Exception, err:
+        if 'IO_ERROR' in err:
+            print err
+            exit(1)
+        else:
+            output("Unhandled exeption. Check me.")
+            print err
+            exit(1)
+
+    if not config_dict['backup']:
+        output('Cant load "backup" key from config %s') % config_file
+    else:
+        config = config_dict['backup']
+
+    fqdn = (socket.getfqdn())
+    short = fqdn.split('.')[0]
+    hostname = short + '.i'
+
+    for instance in proc_dict.keys():
+        if ' primary' in proc_dict[instance]['status']:
+            wd = proc_dict[instance]['work_dir'].strip('" ')
+            wd_snaps = wd + '/snaps'
+            wd_xlogs = wd + '/xlogs'
+            if islink(wd_snaps):
+                wd_snaps_orig = readlink(wd_snaps)
+            if islink(wd_xlogs):
+                wd_xlogs_orig = readlink(wd_xlogs)
+
+            try:
+                db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
+                cur = db.cursor()
+                cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
+
+                if int(cur.rowcount) is 0:
+                    backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
+            except Exception, err:
+                    output('MySQL error. Check me.')
+                    print err
+                    ### We cant print exeption error here 'cos it can contain auth data
+                    exit(1)
+
+    if backup_fail_list:
+        print_list(backup_fail_list)
         exit(2)
 
 def check_crc(adm_port_list, proc_dict, crc_lag_limit=2220):
@@ -595,6 +654,15 @@ if opts.type == 'pinger':
 
     ### Check stuff
     check_pinger(pri_port_list, sec_port_list, memc_port_list, opts.ex_list, opts.config)
+
+if opts.type == 'backup':
+    ### Make stuff
+    tt_proc_list = make_tt_proc_list(proc_pattern)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
+    proc_dict = make_proc_dict(adm_port_list, general_dict)
+
+    ### Check stuff
+    check_backup(proc_dict, opts.config)
 
 if opts.type == 'octopus_crc':
     ### Make stuff
