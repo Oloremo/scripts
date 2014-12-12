@@ -52,7 +52,6 @@ elif opts.type == 'repl':
 waste_limit = 30
 
 ### Global vars
-backup_conf = '/etc/ttmon-backup.conf'
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
 cfg_excl_re = 'tarantool.*feeder.*.cfg$'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
@@ -64,7 +63,7 @@ sock_timeout = 0.1
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
                 'show info': ['recovery_lag', 'config', 'status'],
-                'show configuration': ['primary_port', 'work_dir']}
+                'show configuration': ['primary_port', 'work_dir', 'wal_writer_inbox_size']}
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
@@ -74,7 +73,7 @@ isEL6 = version_info[0] == 2 and version_info[1] >= 6
 
 def output(line):
     if isEL6:
-        stdout.write(line + "<br>")
+        stdout.write(str(line) + "<br>")
         stdout.flush()
     else:
         print line
@@ -236,6 +235,7 @@ def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
                 'recovery_run_crc_lag': lambda x: int(str(x).rsplit('.')[0]),
                 'config': lambda x: x.strip(' "'),
                 'primary_port': lambda x: x.strip(' "'),
+                'wal_writer_inbox_size': lambda x: int(str(x).strip(' "'))
             }
 
             for key in set(args_dict.keys()) & set(filters.keys()):
@@ -566,14 +566,16 @@ def check_backup(proc_dict, config_file):
             try:
                 db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
                 cur = db.cursor()
-                cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
-
+                if proc_dict[instance]['wal_writer_inbox_size'] != 0:
+                    cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
+                else:
+                    cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig))
                 if int(cur.rowcount) is 0:
                     backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
             except Exception, err:
                     output('MySQL error. Check me.')
-                    print err
                     ### We cant print exeption error here 'cos it can contain auth data
+                    #print err
                     exit(1)
 
     if backup_fail_list:
