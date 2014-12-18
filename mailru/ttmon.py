@@ -554,6 +554,9 @@ def check_backup(proc_dict, config_file):
     hostname = short + '.i'
 
     for instance in proc_dict.keys():
+        if proc_dict[instance]['check_error'] != '':
+            backup_fail_list.append("Octopus/Tarantool with admin port %s runs on error: %s" % (proc_dict[instance]['aport'], proc_dict[instance]['check_error']))
+            continue
         if ' primary' in proc_dict[instance]['status']:
             wd = proc_dict[instance]['work_dir'].strip('" ')
             wd_snaps = wd + '/snaps'
