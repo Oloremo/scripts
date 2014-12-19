@@ -306,7 +306,7 @@ def make_port_list(tt_proc_list, pattern):
     for tt_proc in tt_proc_list:
             if p.findall(tt_proc):
                     port = p.findall(tt_proc)[0]
-                    port = d.findall(port)[0]
+                    port = d.findall(port)[-1]
                     port_list_loc.append(port)
 
     return port_list_loc
@@ -655,7 +655,7 @@ if opts.type == 'pinger':
     tt_proc_list = make_tt_proc_list(proc_pattern)
     sec_port_list = make_port_list(tt_proc_list, ' sec:\s*\d+')
     pri_port_list = make_port_list(tt_proc_list, ' pri:\s*\d+')
-    memc_port_list = make_port_list(tt_proc_list, ' memc:\s*\d+')
+    memc_port_list = make_port_list(tt_proc_list, 'primary.*memc:\s*\d+')
 
     ### Check stuff
     check_pinger(pri_port_list, sec_port_list, memc_port_list, opts.ex_list, opts.config)
