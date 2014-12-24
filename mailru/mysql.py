@@ -1,24 +1,27 @@
 #!/usr/bin/env python
 
-from sys import exit, stdout, version_info  # for exit code, output func and version check
-from optparse import OptionParser           # for usage
-from glob import glob                       # for fs file paths
-from os.path import isfile                  # for OS file check
-import MySQLdb                              # for mysql
-from os import chdir                        # for glob()
-import socket                               # for network
-import os.path                              # for mtime check
-import time                                 # for mtime check
+import MySQLdb
+import socket
+import os.path
+import time
+import simplejson as json
+from sys import exit, stdout, version_info
+from optparse import OptionParser
+from glob import glob
+from os.path import isfile
+from os import chdir
+from netifaces import interfaces, ifaddresses
 
 ### Gotta catch 'em all!
 usage = "usage: %prog -t TYPE [-c LIMIT] [-f FLAG]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                  choices=['ok', 'repl', 'load'],
-                  help='Check type. Chose from "ok", "repl", "load"')
+                  choices=['ok', 'repl', 'load', 'pinger'],
+                  help='Check type. Chose from "ok", "repl", "load", "pinger"')
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
                   help="Critical limit. Default: 100 for 'load' and 600 for 'repl'")
+parser.add_option("--conf", dest="config", type="str", default="/etc/mysql_mon.conf", help="Config file. Used in pinger and backup check. Default: /etc/mysql_mon.conf")
 
 (opts, args) = parser.parse_args()
 
@@ -31,7 +34,8 @@ elif opts.type == 'repl':
 
 ### Global vars
 mysql_init_path = ['mysql-*']
-lookup_list = ['datadir', 'socket']
+init_lookup_list = ['datadir', 'socket']
+conf_lookup_list = ['port', 'bind-address']
 
 ### Version check
 isEL6 = version_info[0] == 2 and version_info[1] >= 6
@@ -60,6 +64,13 @@ def open_file(filename):
     except:
         raise Exception
 
+def load_json(file):
+    if not isfile(file):
+        print "file %s not found." % file
+        exit(1)
+
+    return json.load(open(file))
+
 def print_list(list):
     """ Eh... well... it's printing the list... string by string... """
 
@@ -77,7 +88,7 @@ def get_all_mysql(mysql_init_path):
 
     return inits
 
-def make_mysql_dict(inits, lookup_list):
+def make_mysql_dict(inits, init_lookup_list, conf_lookup_list):
     """ Make dict of all mysql with datadir and socket args """
 
     chdir('/etc/init.d')
@@ -90,9 +101,15 @@ def make_mysql_dict(inits, lookup_list):
         file = open_file(init)
         for line in file:
             line = line.split('=')
-            if line[0] in lookup_list:
+            if line[0] in init_lookup_list:
                 mysql_args_dict[line[0]] = line[1].strip()
         mysql_dict[init] = mysql_args_dict
+
+        conf_file = open_file(mysql_dict[init]['datadir'] + '/my.cnf')
+        for line in conf_file:
+            line = line.split('=')
+            if line[0].strip(' ') in conf_lookup_list:
+                mysql_dict[init][line[0].strip(' \n')] = line[1].strip(' \n')
 
     return mysql_dict
 
@@ -188,15 +205,77 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
         print_list(result_warning)
         exit(2)
 
+def getip():
+    """ Returns list of ips of this server """
+
+    ip_list = []
+    for interface in interfaces():
+        if 2 in ifaddresses(interface):
+            if ifaddresses(interface)[2][0]['addr'].startswith('10.') and not ifaddresses(interface)[2][0]['addr'].startswith('10.34'):
+                ip_list.append(ifaddresses(interface)[2][0]['addr'])
+
+    if not ip_list:
+        output("Can't get server ip list. Check me.")
+        exit(1)
+    else:
+        return ip_list
+
+def check_pinger(mysql_dict, config_file):
+    """ Check if octopus\tt on this host is in pinger database """
+
+    pinger_list = []
+    ip_list = getip()
+
+    try:
+        config_dict = load_json(config_file)
+    except Exception, err:
+        if 'IO_ERROR' in err:
+            print err
+            exit(1)
+        else:
+            output("Unhandled exeption. Check me.")
+            print err
+            exit(1)
+
+    if not config_dict['pinger']:
+        output('Cant load "pinger" key from config %s') % config_file
+    else:
+        config = config_dict['pinger']
+
+    ### Connect to db and check remote_stor_ping table for ip:port on this host
+    try:
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
+        cur = db.cursor()
+        for inst in mysql_dict.values():
+            if inst['bind-address'] == '0.0.0.0':
+                for ip in ip_list:
+                    cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like ':%s';" % (ip))
+                    if int(cur.rowcount) is 0:
+                        pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
+            else:
+                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like ':%s';" % (inst['bind-address']))
+                if int(cur.rowcount) is 0:
+                    pinger_list.append('Mysql with ip %s not found in pinger database!' % (inst['bind-address']))
+    except Exception, err:
+            output('MySQL error. Check me.')
+            ### We cant print exeption error here 'cos it can contain auth data
+            exit(1)
+
+    if pinger_list:
+        print_list(pinger_list)
+        exit(2)
+
 ### Make depended things
 inits = get_all_mysql(mysql_init_path)
-mysql_dict = make_mysql_dict(inits, lookup_list)
+mysql_dict = make_mysql_dict(inits, init_lookup_list, conf_lookup_list)
 flag_dict = check_flag(mysql_dict)
 
 ### Check things
 if opts.type == 'ok':
     check_ok(mysql_dict, flag_dict)
-elif opts.type == 'repl':
+if opts.type == 'repl':
     check_mysql(mysql_dict, flag_dict, opts.crit_limit, check_repl=True)
-elif opts.type == 'load':
+if opts.type == 'load':
     check_mysql(mysql_dict, flag_dict, opts.crit_limit, check_load=True)
+if opts.type == 'pinger':
+    check_pinger(mysql_dict, opts.config)
