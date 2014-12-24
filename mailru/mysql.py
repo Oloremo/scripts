@@ -221,7 +221,7 @@ def getip():
         return ip_list
 
 def check_pinger(mysql_dict, config_file):
-    """ Check if octopus\tt on this host is in pinger database """
+    """ Check if mysql on this host is in pinger database """
 
     pinger_list = []
     ip_list = getip()
@@ -249,11 +249,11 @@ def check_pinger(mysql_dict, config_file):
         for inst in mysql_dict.values():
             if inst['bind-address'] == '0.0.0.0':
                 for ip in ip_list:
-                    cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like ':%s';" % (ip))
+                    cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
                     if int(cur.rowcount) is 0:
                         pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
             else:
-                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like ':%s';" % (inst['bind-address']))
+                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (inst['bind-address']))
                 if int(cur.rowcount) is 0:
                     pinger_list.append('Mysql with ip %s not found in pinger database!' % (inst['bind-address']))
     except Exception, err:
