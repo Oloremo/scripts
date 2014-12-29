@@ -149,6 +149,16 @@ def check_ok(mysql_dict, flag_dict):
         print_list(result)
         exit(2)
 
+def check_ro(sock):
+    db = MySQLdb.connect(unix_socket=sock)
+    cur = db.cursor()
+    cur.execute("SELECT @@global.read_only;")
+    row = cur.fetchone()
+    if row[0] == 1:
+        return True
+    else:
+        return False
+
 def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False):
     """ Check replica lag or mysql proc count """
 
@@ -247,15 +257,16 @@ def check_pinger(mysql_dict, config_file):
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
         for inst in mysql_dict.values():
-            if inst['bind-address'] == '0.0.0.0':
-                for ip in ip_list:
-                    cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
+            if not check_ro(inst['socket']):
+                if inst['bind-address'] == '0.0.0.0':
+                    for ip in ip_list:
+                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
+                        if int(cur.rowcount) is 0:
+                            pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
+                else:
+                    cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (inst['bind-address']))
                     if int(cur.rowcount) is 0:
-                        pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
-            else:
-                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (inst['bind-address']))
-                if int(cur.rowcount) is 0:
-                    pinger_list.append('Mysql with ip %s not found in pinger database!' % (inst['bind-address']))
+                        pinger_list.append('Mysql with ip %s not found in pinger database!' % (inst['bind-address']))
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
