@@ -254,7 +254,7 @@ def check_pinger(mysql_dict, config_file):
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
-        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1)
         cur = db.cursor()
         for inst in mysql_dict.values():
             if not check_ro(inst['socket']):
