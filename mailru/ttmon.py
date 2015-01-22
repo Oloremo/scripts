@@ -7,20 +7,21 @@ import errno
 import MySQLdb
 import simplejson as json
 from glob import glob
+from time import time
 from sys import exit, stdout, version_info
-from os import chdir, readlink
+from os import chdir, readlink, path, listdir
 from select import select
 from optparse import OptionParser, OptionGroup
 from os.path import isfile, islink
 from netifaces import interfaces, ifaddresses
 
 ### Gotta catch 'em all!
-usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [--exit NUM]"
+usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [-x port_exlude] [--conf /path/to/conf] [--exit NUM]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                  choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc', 'backup'],
-                  help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc"')
+                  choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc', 'backup', 'snaps'],
+                  help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc", "backup", "snaps"')
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-c", dest="crit_limit", type="int", help="Critical limit. Defaults: slab = 90. repl = 10")
@@ -62,8 +63,8 @@ repl_fail_status = ['/fail:', '/failed']
 sock_timeout = 0.1
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
-                'show info': ['recovery_lag', 'config', 'status'],
-                'show configuration': ['primary_port', 'work_dir', 'wal_writer_inbox_size']}
+                'show info': ['recovery_lag', 'config', 'status', 'lsn'],
+                'show configuration': ['primary_port', 'work_dir', 'wal_writer_inbox_size', 'snap_dir']}
 crc_check_dict = {'show configuration': ['wal_feeder_addr'],
                   'show info': ['recovery_run_crc_lag', 'recovery_run_crc_status']}
 
@@ -228,6 +229,7 @@ def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
             sock.close()
 
             filters = {
+                'lsn': lambda x: int(str(x).rsplit('.')[0]),
                 'items_used': lambda x: int(str(x).rsplit('.')[0]),
                 'arena_used': lambda x: int(str(x).rsplit('.')[0]),
                 'waste': lambda x: int(str(x).rsplit('.')[0]),
@@ -260,15 +262,15 @@ def make_paths_list(paths, excl_pattern, basename=False,):
     paths_list_loc = []
     p = re.compile(excl_pattern)
 
-    for path in paths:
+    for directory in paths:
             if basename:
-                    path = path.rsplit('/', 1)
-                    chdir(path[0])
-                    if glob(path[1]):
-                            paths_list_loc.extend(glob(path[1]))
+                    directory = directory.rsplit('/', 1)
+                    chdir(directory[0])
+                    if glob(directory[1]):
+                            paths_list_loc.extend(glob(directory[1]))
             else:
-                    if glob(path):
-                            paths_list_loc.extend(glob(path))
+                    if glob(directory):
+                            paths_list_loc.extend(glob(directory))
 
     paths_list_loc = [item for item in paths_list_loc if not p.findall(item)]
 
@@ -602,6 +604,38 @@ def check_crc(adm_port_list, proc_dict, crc_lag_limit=2220):
         print_list(crc_problems_list)
         exit(2)
 
+def check_snaps(proc_dict, config_file):
+    problems = []
+
+    try:
+        config_dict = load_json(config_file)
+    except Exception, err:
+        if 'IO_ERROR' in err:
+            print err
+            exit(1)
+        else:
+            output("Unhandled exeption. Check me.")
+            print err
+            exit(1)
+
+    limit = 240 if 'snaps' not in config_dict else config_dict['snaps']['limit']
+
+    for inst in proc_dict.values():
+        dir = inst['snap_dir'].strip('" ')
+        if path.exists(dir):
+            snap_dir = readlink(dir) if islink(dir) else dir
+            chdir(snap_dir)
+            newest = max(listdir(snap_dir), key=path.getmtime)
+            snap_lsn = int(newest.split('.')[0])
+            if time() - path.getmtime(newest) > (limit * 60) and inst['lsn'] > snap_lsn:
+                problems.append("Octopus/Tarantool with snap dir %s. Last snapshot was made more than %s minutes ago." % (dir, limit))
+        else:
+            problems.append("Octopus/Tarantool with snap dir %s runs on error: not such directory. Its bug in monitoring or huge fuckup on server." % dir)
+
+    if problems:
+        print_list(problems)
+        exit(2)
+
 ### Do the work
 if opts.type == 'infr_cvp':
     ### Make stuff
@@ -677,3 +711,10 @@ if opts.type == 'octopus_crc':
 
     ### Check stuff
     check_crc(adm_port_list, proc_dict, crc_lag_limit)
+
+if opts.type == 'snaps':
+    tt_proc_list = make_tt_proc_list(proc_pattern)
+    adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
+    proc_dict = make_proc_dict(adm_port_list, general_dict)
+
+    check_snaps(proc_dict, opts.config)
