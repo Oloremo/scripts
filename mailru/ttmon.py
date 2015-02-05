@@ -24,33 +24,12 @@ parser.add_option('-t', '--type', type='choice', action='store', dest='type',
                   help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc", "backup", "snaps"')
 
 group = OptionGroup(parser, "Ajusting limits")
-group.add_option("-c", dest="crit_limit", type="int", help="Critical limit. Defaults: slab = 90. repl = 10")
-group.add_option("-w", dest="warn_limit", type="int", help="Warning limit. Defaults slab = 80. repl = 5")
-group.add_option("-i", dest="info_limit", type="int", help="Info limit. Defaults slab = 70. repl = 1")
 group.add_option("-x", type="str", action="append", dest="ex_list", help="Exclude list of ports. This ports won't be cheked by 'pinger' check.")
 group.add_option("--exit", dest="exit_code", type="int", default="3", help="Exit code for infrastructure monitoring. Default: 3(Info)")
 group.add_option("--conf", dest="config", type="str", default="/etc/ttmon.conf", help="Config file. Used in pinger and backup check. Default: /etc/ttmon.conf")
 parser.add_option_group(group)
 
 (opts, args) = parser.parse_args()
-
-if opts.type == 'slab':
-        if not opts.crit_limit:
-                opts.crit_limit = 90
-        if not opts.warn_limit:
-                opts.warn_limit = 80
-        if not opts.info_limit:
-                opts.info_limit = 70
-elif opts.type == 'repl':
-        if not opts.crit_limit:
-                opts.crit_limit = 10
-        if not opts.warn_limit:
-                opts.warn_limit = 5
-        if not opts.info_limit:
-                opts.info_limit = 1
-
-### FIXME
-waste_limit = 30
 
 ### Global vars
 cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg', '/etc/tarantool/*.cfg']
@@ -122,12 +101,21 @@ def open_socket(sock, timeout, host, port):
         exit(1)
     return False
 
-def load_json(file):
+def load_config(file, type):
     if not isfile(file):
-        print "file %s not found." % file
+        print "Config load error. File %s not found." % file
         exit(1)
-
-    return json.load(open(file))
+    try:
+        config = json.load(open(file))
+        if type in config:
+            return config[type]
+        else:
+            output('Cant load "%s" key from config %s' % (type, file))
+            exit(2)
+    except Exception, err:
+        output("Unhandled exeption. Check me.")
+        print err
+        exit(1)
 
 def read_socket(sock, timeout=1, recv_buffer=262144):
     """ Nice way to read from socket. We use select() for timeout and recv handling """
@@ -392,7 +380,7 @@ def check_infrastructure(exit_code, infr_cvp=False, infr_pvc=False, infr_ivc=Fal
             print_list(errors_list)
             exit(exit_code)
 
-def check_stats(proc_dict, crit, warn, info, check_repl=False):
+def check_stats(proc_dict, config_file, check_repl=False):
     """ Check stats from proccess against limits """
 
     result_critical = []
@@ -409,6 +397,7 @@ def check_stats(proc_dict, crit, warn, info, check_repl=False):
             continue
 
         if check_repl:
+                config = load_config(config_file, 'repl')
                 rep_lag = proc_dict[proc]['recovery_lag']
 
                 if [word for word in repl_fail_status if word in proc_dict[aport]['status']]:
@@ -418,38 +407,39 @@ def check_stats(proc_dict, crit, warn, info, check_repl=False):
                     result_critical.append(print_alert('', '', '', aport, "Can't get replication lag info. Check me."))
                     continue
 
-                if rep_lag >= crit:
-                        result_critical.append(print_alert('replication_lag', rep_lag, crit, aport, error))
-                elif rep_lag >= warn:
-                        result_warning.append(print_alert('replication_lag', rep_lag, warn, aport, error))
-                elif rep_lag >= info:
-                        result_info.append(print_alert('replication_lag', rep_lag, info, aport, error))
+                if rep_lag >= config['crit']:
+                        result_critical.append(print_alert('replication_lag', rep_lag, config['lag_crit'], aport, error))
+                elif rep_lag >= config['warn']:
+                        result_warning.append(print_alert('replication_lag', rep_lag, config['lag_warn'], aport, error))
+                elif rep_lag >= config['info']:
+                        result_info.append(print_alert('replication_lag', rep_lag, config['lag_info'], aport, error))
 
         else:
                 if proc_dict[proc]['items_used'] == '' or proc_dict[proc]['arena_used'] == '':
                     result_critical.append(print_alert('', '', '', aport, 'Cant get items_used or arena_used from process.'))
                     continue
 
+                config = load_config(config_file, 'slab')
                 items_used = proc_dict[proc]['items_used']
                 arena_used = proc_dict[proc]['arena_used']
                 waste = proc_dict[proc]['waste']
 
-                if items_used >= crit:
-                        result_critical.append(print_alert('items_used', items_used, crit, aport, error))
-                elif items_used >= warn:
-                        result_warning.append(print_alert('items_used', items_used, warn, aport, error))
-                elif items_used >= info:
-                        result_info.append(print_alert('items_used', items_used, info, aport, error))
+                if items_used >= config['crit']:
+                        result_critical.append(print_alert('items_used', items_used, config['crit'], aport, error))
+                elif items_used >= config['warn']:
+                        result_warning.append(print_alert('items_used', items_used, config['warn'], aport, error))
+                elif items_used >= config['info']:
+                        result_info.append(print_alert('items_used', items_used, config['info'], aport, error))
 
-                if arena_used >= crit:
-                        result_critical.append(print_alert('arena_used', arena_used, crit, aport, error))
-                elif arena_used >= warn:
-                        result_warning.append(print_alert('arena_used', arena_used, warn, aport, error))
-                elif arena_used >= info:
-                        result_info.append(print_alert('arena_used', arena_used, info, aport, error))
+                if arena_used >= config['crit']:
+                        result_critical.append(print_alert('arena_used', arena_used, config['crit'], aport, error))
+                elif arena_used >= config['warn']:
+                        result_warning.append(print_alert('arena_used', arena_used, config['warn'], aport, error))
+                elif arena_used >= config['info']:
+                        result_info.append(print_alert('arena_used', arena_used, config['info'], aport, error))
 
-                if waste >= waste_limit:
-                        result_info.append(print_alert('waste', waste, waste_limit, aport, error))
+                if waste >= config['waste']:
+                        result_info.append(print_alert('waste', waste, config['waste'], aport, error))
 
     ### Depending on situation it prints revelant list filled with alert strings
     if (result_critical or repl_problems) and result_warning:
@@ -490,21 +480,7 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config_f
     port_set = set('')
     ip_list = getip()
 
-    try:
-        config_dict = load_json(config_file)
-    except Exception, err:
-        if 'IO_ERROR' in err:
-            print err
-            exit(1)
-        else:
-            output("Unhandled exeption. Check me.")
-            print err
-            exit(1)
-
-    if not config_dict['pinger']:
-        output('Cant load "pinger" key from config %s') % config_file
-    else:
-        config = config_dict['pinger']
+    config = load_config(config_file, 'pinger')
 
     ### Make a set of ports
     for ports in pri_port_list, sec_port_list, memc_port_list:
@@ -534,23 +510,7 @@ def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config_f
 def check_backup(proc_dict, config_file):
 
     backup_fail_list = []
-
-    try:
-        config_dict = load_json(config_file)
-    except Exception, err:
-        if 'IO_ERROR' in err:
-            print err
-            exit(1)
-        else:
-            output("Unhandled exeption. Check me.")
-            print err
-            exit(1)
-
-    if not config_dict['backup']:
-        output('Cant load "backup" key from config %s') % config_file
-    else:
-        config = config_dict['backup']
-
+    config = load_config(config_file, 'backup')
     fqdn = (socket.getfqdn())
     short = fqdn.split('.')[0]
     hostname = short + '.i'
@@ -606,19 +566,7 @@ def check_crc(adm_port_list, proc_dict, crc_lag_limit=2220):
 
 def check_snaps(proc_dict, config_file):
     problems = []
-
-    try:
-        config_dict = load_json(config_file)
-    except Exception, err:
-        if 'IO_ERROR' in err:
-            print err
-            exit(1)
-        else:
-            output("Unhandled exeption. Check me.")
-            print err
-            exit(1)
-
-    limit = 240 if 'snaps' not in config_dict else config_dict['snaps']['limit']
+    config = load_config(config_file, 'snaps')
 
     for inst in proc_dict.values():
         dir = inst['snap_dir'].strip('" ')
@@ -627,8 +575,8 @@ def check_snaps(proc_dict, config_file):
             chdir(snap_dir)
             newest = max(listdir(snap_dir), key=path.getmtime)
             snap_lsn = int(newest.split('.')[0])
-            if time() - path.getmtime(newest) > (limit * 60) and inst['lsn'] > snap_lsn:
-                problems.append("Octopus/Tarantool with snap dir %s. Last snapshot was made more than %s minutes ago." % (dir, limit))
+            if time() - path.getmtime(newest) > (config['limit'] * 60) and inst['lsn'] > snap_lsn:
+                problems.append("Octopus/Tarantool with snap dir %s. Last snapshot was made more than %s minutes ago." % (dir, config['limit']))
         else:
             problems.append("Octopus/Tarantool with snap dir %s runs on error: not such directory. Its bug in monitoring or huge fuckup on server." % dir)
 
@@ -673,7 +621,7 @@ if opts.type == 'slab':
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
-    check_stats(proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit)
+    check_stats(proc_dict, opts.config)
 
 if opts.type == 'repl':
     ### Make stuff
@@ -682,7 +630,7 @@ if opts.type == 'repl':
     proc_dict = make_proc_dict(adm_port_list, general_dict)
 
     ### Check stuff
-    check_stats(proc_dict, opts.crit_limit, opts.warn_limit, opts.info_limit, check_repl=True)
+    check_stats(proc_dict, opts.config, check_repl=True)
 
 if opts.type == 'pinger':
     ### Make stuff
