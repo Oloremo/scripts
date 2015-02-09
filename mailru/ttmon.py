@@ -408,11 +408,11 @@ def check_stats(proc_dict, config_file, check_repl=False):
                     continue
 
                 if rep_lag >= config['crit']:
-                        result_critical.append(print_alert('replication_lag', rep_lag, config['lag_crit'], aport, error))
+                        result_critical.append(print_alert('replication_lag', rep_lag, config['crit'], aport, error))
                 elif rep_lag >= config['warn']:
-                        result_warning.append(print_alert('replication_lag', rep_lag, config['lag_warn'], aport, error))
+                        result_warning.append(print_alert('replication_lag', rep_lag, config['warn'], aport, error))
                 elif rep_lag >= config['info']:
-                        result_info.append(print_alert('replication_lag', rep_lag, config['lag_info'], aport, error))
+                        result_info.append(print_alert('replication_lag', rep_lag, config['info'], aport, error))
 
         else:
                 if proc_dict[proc]['items_used'] == '' or proc_dict[proc]['arena_used'] == '':
