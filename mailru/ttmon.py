@@ -36,7 +36,7 @@ cfg_paths_list = ['/usr/local/etc/tarantool*.cfg', '/usr/local/etc/octopus*.cfg'
 cfg_excl_re = 'tarantool.*feeder.*.cfg$'
 init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 init_exl_list = ['*.rpmsave', 'tarantool_opengraph_feeder', 'tarantool_opengraph', 'octopus', 'octopus-colander', 'tarantool', 'tarantool_box', 'tarantool-initd-wrapper']
-proc_pattern = '.*(tarantool|octopus).* adm:.*\d+.*'
+proc_pattern = '.*(tarantool|octopus|octopus_rlimit).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 repl_fail_status = ['/fail:', '/failed']
 sock_timeout = 0.1
@@ -569,6 +569,9 @@ def check_snaps(proc_dict, config_file):
     config = load_config(config_file, 'snaps')
 
     for inst in proc_dict.values():
+        if inst['check_error'] != '':
+            problems.append("Octopus/Tarantool with admin port %s runs on error: %s" % (inst['aport'], inst['check_error']))
+            continue
         dir = inst['snap_dir'].strip('" ')
         if path.exists(dir):
             snap_dir = readlink(dir) if islink(dir) else dir
