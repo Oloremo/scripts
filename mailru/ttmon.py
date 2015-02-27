@@ -576,10 +576,13 @@ def check_snaps(proc_dict, config_file):
         if path.exists(dir):
             snap_dir = readlink(dir) if islink(dir) else dir
             chdir(snap_dir)
-            newest = max(listdir(snap_dir), key=path.getmtime)
-            snap_lsn = int(newest.split('.')[0])
-            if time() - path.getmtime(newest) > (config['limit'] * 60) and inst['lsn'] > snap_lsn:
-                problems.append("Octopus/Tarantool with snap dir %s. Last snapshot was made more than %s minutes ago." % (dir, config['limit']))
+            if listdir(snap_dir):
+                newest = max(listdir(snap_dir), key=path.getmtime)
+                snap_lsn = int(newest.split('.')[0])
+                if time() - path.getmtime(newest) > (config['limit'] * 60) and inst['lsn'] > snap_lsn:
+                    problems.append("Octopus/Tarantool with snap dir %s. Last snapshot was made more than %s minutes ago." % (dir, config['limit']))
+            else:
+                problems.append("Octopus/Tarantool with snap dir %s runs on error: no snapshot found" % dir)
         else:
             problems.append("Octopus/Tarantool with snap dir %s runs on error: not such directory. Its bug in monitoring or huge fuckup on server." % dir)
 
