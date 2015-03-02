@@ -22,6 +22,8 @@ parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
                   choices=['slab', 'repl', 'infr_cvp', 'infr_pvc', 'infr_ivc', 'pinger', 'octopus_crc', 'backup', 'snaps'],
                   help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc", "backup", "snaps"')
+parser.add_option("--json", action="store_true", dest="json_output_enabled",
+                  help="Enable json output for some checks")
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-x", type="str", action="append", dest="ex_list", help="Exclude list of ports. This ports won't be cheked by 'pinger' check.")
@@ -276,6 +278,17 @@ def make_tt_proc_list(pattern):
 
     return tt_proc_list_loc
 
+def port_to_proc_title_compare(tt_proc_list, ports_set):
+    port_title = {}
+    for port in ports_set:
+        title_re = re.compile('@.*?:')
+        for line in tt_proc_list:
+            if port in line:
+                title = title_re.findall(line)[0].strip('@:')
+                port_title[port] = title
+
+    return port_title
+
 def make_chkcfg_list():
     """ Making a list of init scripts added to chkconfig """
 
@@ -473,37 +486,33 @@ def getip():
     else:
         return ip_list
 
-def check_pinger(pri_port_list, sec_port_list, memc_port_list, ex_list, config_file):
+def check_pinger(port_title, config_file):
     """ Check if octopus\tt on this host is in pinger database """
 
     pinger_list = []
-    port_set = set('')
+    tojson = {}
     ip_list = getip()
 
     config = load_config(config_file, 'pinger')
-
-    ### Make a set of ports
-    for ports in pri_port_list, sec_port_list, memc_port_list:
-        port_set |= set(ports)
-
-    if ex_list:
-        port_set.difference_update(set(ex_list))
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
         for ip in ip_list:
-            for port in port_set:
+            for port in port_title.keys():
                 cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ip, port))
                 if int(cur.rowcount) is 0:
                     pinger_list.append('Octopus/Tarantool with ip:port %s:%s not found in pinger database!' % (ip, port))
+                    tojson[port] = {'title': port_title[port], 'ip': ip}
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
             exit(1)
 
-    if pinger_list:
+    if opts.json_output_enabled:
+        print json.dumps(tojson)
+    elif pinger_list:
         print_list(pinger_list)
         exit(2)
 
@@ -645,8 +654,16 @@ if opts.type == 'pinger':
     pri_port_list = make_port_list(tt_proc_list, ' pri:\s*\d+')
     memc_port_list = make_port_list(tt_proc_list, 'primary.*memc:\s*\d+')
 
+    ports_set = set('')
+    for ports in pri_port_list, sec_port_list, memc_port_list:
+        ports_set |= set(ports)
+    if opts.ex_list:
+        ports_set.difference_update(set(opts.ex_list))
+
+    port_title = port_to_proc_title_compare(tt_proc_list, ports_set)
+
     ### Check stuff
-    check_pinger(pri_port_list, sec_port_list, memc_port_list, opts.ex_list, opts.config)
+    check_pinger(port_title, opts.config)
 
 if opts.type == 'backup':
     ### Make stuff
