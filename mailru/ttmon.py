@@ -284,7 +284,8 @@ def port_to_proc_title_compare(tt_proc_list, ports_set):
         title_re = re.compile('@.*?:')
         for line in tt_proc_list:
             if port in line:
-                title = title_re.findall(line)[0].strip('@:')
+                title = title_re.findall(line)
+                title = title[0].strip('@:') if title else 'unknown'
                 type = 'octopus' if 'octopus' in line else 'tarantool'
                 port_title_type[port] = {'title': title, 'type': type}
 
