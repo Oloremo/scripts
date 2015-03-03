@@ -73,16 +73,16 @@ def get_tt_json(type):
     tt_json = subprocess.Popen(['/etc/snmp/bin/ttmon.py', '-t', type, '--json'], stdout=subprocess.PIPE).communicate()[0]
     return json.loads(tt_json)
 
-def mysql_execute(config, insert_tmpl, short, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup):
+def mysql_execute(config, insert_tmpl, hostname, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup):
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
         ### Check if it's allready exist
-        cur.execute("select * from server_backups where host = '%s' and tarantool_snaps_dir='%s' and tarantool_xlogs_dir='%s'" % (short, snaps_dir, xlogs_dir))
+        cur.execute("select * from server_backups where host = '%s' and tarantool_snaps_dir='%s' and tarantool_xlogs_dir='%s'" % (hostname, snaps_dir, xlogs_dir))
         if int(cur.rowcount) is not 0:
             print "Record for this instance allready exist"
         else:
-            cur.execute("%s ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '');" % (insert_tmpl, short, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup))
+            cur.execute("%s ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '');" % (insert_tmpl, hostname, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup))
             db.commit()
     except Exception, err:
             db.rollback()
@@ -96,6 +96,7 @@ def add_backup(config_file, type, inst, bull, skip_check, skip_backup, backup_re
     config = load_config(config_file, 'backup')
     fqdn = (socket.getfqdn())
     short = fqdn.split('.')[0]
+    hostname = short + '.i'
     rsync_user = 'my_backup'
     rsync_pass = 'reemaNg5hahku3ho'
 
@@ -114,7 +115,7 @@ def add_backup(config_file, type, inst, bull, skip_check, skip_backup, backup_re
             if not opts.batch:
                 yes_no()
 
-            mysql_execute(config, insert_tmpl, short, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup)
+            mysql_execute(config, insert_tmpl, hostname, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup)
     else:
         snaps_dir = '/var/%s%s/snaps' % (type, inst)
         xlogs_dir = '/var/%s%s/xlogs' % (type, inst)
