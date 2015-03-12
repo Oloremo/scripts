@@ -281,7 +281,7 @@ def make_tt_proc_list(pattern):
 def port_to_proc_title_compare(tt_proc_list, ports_set):
     port_title_type = {}
     for port in ports_set:
-        title_re = re.compile('@.*?:')
+        title_re = re.compile('@([^:\s]+)')
         for line in tt_proc_list:
             if port in line:
                 title = title_re.findall(line)
@@ -525,7 +525,7 @@ def check_backup(proc_dict, config_file):
     fqdn = (socket.getfqdn())
     short = fqdn.split('.')[0]
     hostname = short + '.i'
-    title_re = re.compile('@.*?:')
+    title_re = re.compile('@([^:\s]+)')
     to_json = {}
 
     for instance in proc_dict.keys():
