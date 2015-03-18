@@ -23,7 +23,7 @@ parser.add_option("--bull", action="store", dest="bull", help="Specify bull host
 
 (opts, args) = parser.parse_args()
 
-if not opts.type == 'auto' and not opts.bull and opts.batch:
+if not opts.auto and not opts.bull and opts.batch:
     print "In batch mode you must specify bull host for backup. For example: '--bull bull40.i'"
     exit(1)
 
@@ -39,27 +39,10 @@ def load_config(file, type):
             print 'Cant load "%s" key from config %s' % (type, file)
             exit(2)
     except Exception, err:
+        print "Error while load config from %s" % file
         print "Unhandled exeption. Check me."
         print err
         exit(1)
-
-#def print_inst_data(short, bk_type, bull, module, backup_retention, retension, snaps_dir, xlogs_dir, skip_check, skip_backup):
-#    print """You're about to add this data to backup:
-#
-#host:                %s
-#type:                %s
-#rsync_host:          %s
-#rsync_modulepath:    %s
-#backup_retention:    %s
-#machine_retention:   %s
-#tarantool_snaps_dir: %s
-#tarantool_xlogs_dir: %s
-#skip_check:          %s
-#skip_backup:         %s
-#""" % (short, bk_type, bull, module, backup_retention, retension, snaps_dir, xlogs_dir, skip_check, skip_backup)
-
-def print_inst_data(inst_tuple, type):
-    print inst_tuple
 
 def yes_no():
     yes = set(['yes', 'y'])
@@ -78,6 +61,18 @@ def get_tt_json(type):
     tt_json = subprocess.Popen(['/etc/snmp/bin/ttmon.py', '-t', type, '--json'], stdout=subprocess.PIPE).communicate()[0]
     return json.loads(tt_json)
 
+def print_insert_data(names_list, data_list, type):
+    data_dict = dict(zip(names_list, data_list))
+    name_max_len = len(max(names_list, key=len))
+
+    print "\nYou're about to add this data to %s:\n" % type
+    for name in names_list:
+        print "%s: %s" % (name.ljust(name_max_len + 5), data_dict[name])
+    print '\n'
+
+    if not opts.batch:
+        yes_no()
+
 def get_bull():
     r = requests.get('http://doll.i:9999/get-bull')
     if r.status_code == 200:
@@ -93,17 +88,18 @@ def get_bull():
 
     if ten_plus:
         top5_bulls = sorted(ten_plus, key=ten_plus.get, reverse=True)[:5]
-        return random.choice(top5_bulls)
+        return str(random.choice(top5_bulls))
     elif five_plus:
         top5_bulls = sorted(ten_plus, key=ten_plus.get, reverse=True)[:5]
-        return random.choice(top5_bulls)
+        return str(random.choice(top5_bulls))
     elif one_plus:
         top_bull = max(one_plus, key=one_plus.get)
-        return top_bull
+        return str(top_bull)
     else:
-        return False
+        print "There is no bull with free space more than 1Tb. Refuse to choose"
+        exit(1)
 
-def backup_mysql_execute(config, insert_tmpl, hostname, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup):
+def backup_mysql_execute(config, insert_tmpl, hostname, bk_type, rsync_host, module, rsync_user, backup_retention, machine_retention, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup):
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
@@ -112,86 +108,70 @@ def backup_mysql_execute(config, insert_tmpl, hostname, bk_type, bull, module, r
         if int(cur.rowcount) is not 0:
             print "Record for this instance allready exist"
         else:
-            cur.execute("%s ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '');" % (insert_tmpl, hostname, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup))
+            cur.execute("%s ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '');" % (insert_tmpl, hostname, bk_type, rsync_host, module, rsync_user, backup_retention, machine_retention, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup))
             db.commit()
+            print "Success!"
     except Exception, err:
             db.rollback()
             print 'MySQL error.'
             print err
             exit(1)
 
-def pinger_mysql_execute(config, ping_dict):
+def pinger_mysql_execute(config, title, conn_string):
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
-        for port in ping_dict.keys():
-            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ping_dict[port]['ip'], port))
-            if int(cur.rowcount) is not 0:
-                print "Record for this instance allready exist"
-            else:
-                cur.execute("insert into remote_stor_ping values ('%s-%s:%s','iproto','4','','','%s:%s', NULL, NULL);" % (ping_dict[port]['title'], ping_dict[port]['ip'], port, ping_dict[port]['ip'], port))
-                db.commit()
+        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s';") % conn_string
+        if int(cur.rowcount) is not 0:
+            print "Record for this instance allready exist"
+        else:
+            cur.execute("insert into remote_stor_ping values ('%s','iproto','4','','','%s', NULL, NULL);") % (title, conn_string)
+            db.commit()
+            print "Success!"
     except Exception, err:
             db.rollback()
             print 'MySQL error.'
             print err
             exit(1)
 
-def add_backup(config_file, type, inst, bull, skip_check, skip_backup, backup_retention=14, retension=1, gzip_period=3):
+def add_backup(config_file, type, inst, bull, skip_check, skip_backup, backup_retention=14, machine_retention=1, gzip_period=3):
 
-    insert_tmpl = ("insert into backup.server_backups (host, type, rsync_host, rsync_modulepath, rsync_login, rsync_passwd, backup_retention, machine_retention, gzip_period, tarantool_snaps_dir, tarantool_xlogs_dir, skip_check, skip_backup, optfile_list) values")
+    insert_tmpl = ("insert into backup.server_backups (host, type, rsync_host, rsync_modulepath, rsync_login, backup_retention, machine_retention, gzip_period, tarantool_snaps_dir, tarantool_xlogs_dir, skip_check, skip_backup, optfile_list) values")
     config = load_config(config_file, 'backup')
     fqdn = (socket.getfqdn())
     short = fqdn.split('.')[0]
     hostname = short + '.i'
     rsync_user = 'my_backup'
-    rsync_pass = 'reemaNg5hahku3ho'
 
     if opts.auto:
         bk_dict = get_tt_json('backup')
+        names_list = ['hostname', 'rsync_host', 'type', 'module', 'snaps_dir', 'xlogs_dir', 'backup_retention', 'machine_retention', 'skip_check', 'skip_backup']
 
         for inst in bk_dict.values():
-            type = inst['type']
-            bk_type = 'tarantool' if ('octopus' == type or 'tarantool' == type) else 'mysql'
-            title = inst['title']
-            snaps_dir = inst['snaps']
-            xlogs_dir = inst['xlogs']
-            module = '%s/%s/%s/%s' % (rsync_user, type, short, title)
-            bull = get_bull()
-            print bull
+            bk_type = 'tarantool' if ('octopus' == inst['type'] or 'tarantool' == inst['type']) else 'mysql'
+            module = '%s/%s/%s/%s' % (rsync_user, inst['type'], short, inst['title'])
+            rsync_host = get_bull()
+            data_list = [hostname, rsync_host, bk_type, module, inst['snaps'], inst['xlogs'], backup_retention, machine_retention, skip_check, skip_backup]
 
-            #print_inst_data(short, bk_type, bull, module, backup_retention, retension, snaps_dir, xlogs_dir, skip_check, skip_backup)
-            if not opts.batch:
-                yes_no()
-
-            backup_mysql_execute(config, insert_tmpl, hostname, bk_type, bull, module, rsync_user, rsync_pass, backup_retention, retension, gzip_period, snaps_dir, xlogs_dir, skip_check, skip_backup)
-    else:
-        snaps_dir = '/var/%s%s/snaps' % (type, inst)
-        xlogs_dir = '/var/%s%s/xlogs' % (type, inst)
-        bk_type = 'tarantool' if ('octopus' == type or 'tarantool' == type) else 'mysql'
-        module = '%s/%s/%s/%s' % (rsync_user, type, short, type)
+            print_insert_data(names_list, data_list, 'backup')
+            backup_mysql_execute(config, insert_tmpl, hostname, bk_type, rsync_host, module, rsync_user, backup_retention, machine_retention, gzip_period, inst['snaps'], inst['xlogs'], skip_check, skip_backup)
 
 def add_pinger(config_file):
     config = load_config(config_file, 'pinger')
-    data_names = ('title', 'ip', 'port')
-    data_list = []
 
     if opts.auto:
         ping_dict = get_tt_json('pinger')
-        #for port in ping_dict.keys():
-        #    ping_dict[port]['port'] = port
-        #for inst in ping_dict.values():
-        #    for name in data_names:
-        #        data_list.append((name, inst[name]))
-        #print data_list
-        #print_inst_data(ping_dict, 'pinger')
+        names_list = ['title', 'conn_string', 'type']
 
-        if not opts.batch:
-            yes_no()
+        for port, inst in ping_dict.items():
+            title = '%s-%s:%s' % (inst['title'], inst['ip'], port)
+            conn_string = '%s:%s' % (inst['ip'], port)
+            type = inst['type']
+            data_list = [title, conn_string, type]
 
-        pinger_mysql_execute(config, ping_dict)
-
+            print_insert_data(names_list, data_list, 'pinger')
+            pinger_mysql_execute(config, title, conn_string)
 
 if opts.auto:
-    add_backup(opts.config, opts.type, 'auto', opts.bull, '0', '0')
+    #add_backup(opts.config, opts.type, 'auto', opts.bull, '0', '0')
     add_pinger(opts.config)
