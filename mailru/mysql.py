@@ -143,8 +143,7 @@ def check_ok(mysql_dict, flag_dict):
             chdir(mysql_dict[inst]['datadir'])
             file = open_file(hostname + '.err')
             if file[-1].strip() != 'OK':
-                result.append('Mysql with datadir "%s" has problems: %s' % (mysql_dict[inst]['datadir'], file[-1].strip()))
-
+                result.append('Mysql with datadir "%s" has problems: %s' % (mysql_dict[inst]['datadir'], file[-1]))
     if result:
         print_list(result)
         exit(2)
@@ -230,7 +229,7 @@ def getip():
     else:
         return ip_list
 
-def check_pinger(mysql_dict, config_file):
+def check_pinger(mysql_dict, flag_dict, config_file):
     """ Check if mysql on this host is in pinger database """
 
     pinger_list = []
@@ -256,20 +255,24 @@ def check_pinger(mysql_dict, config_file):
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1)
         cur = db.cursor()
-        for inst in mysql_dict.values():
-            if not check_ro(inst['socket']):
-                if inst['bind-address'] == '0.0.0.0':
-                    for ip in ip_list:
-                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
+        for inst in mysql_dict.keys():
+            if flag_dict[inst]['flag'] and flag_dict[inst]['stale']:
+                pinger_list.append('Stale backup flag found! %s is older than 60 min.' % flag_dict[inst]['file'])
+            if not flag_dict[inst]['flag']:
+                if not check_ro(inst['socket']):
+                    if mysql_dict[inst]['bind-address'] == '0.0.0.0':
+                        for ip in ip_list:
+                            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
+                            if int(cur.rowcount) is 0:
+                                pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
+                    else:
+                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (mysql_dict[inst]['bind-address']))
                         if int(cur.rowcount) is 0:
-                            pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
-                else:
-                    cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (inst['bind-address']))
-                    if int(cur.rowcount) is 0:
-                        pinger_list.append('Mysql with ip %s not found in pinger database!' % (inst['bind-address']))
+                            pinger_list.append('Mysql with ip %s not found in pinger database!' % (mysql_dict[inst]['bind-address']))
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
+            #print err
             exit(1)
 
     if pinger_list:
@@ -289,4 +292,4 @@ if opts.type == 'repl':
 if opts.type == 'load':
     check_mysql(mysql_dict, flag_dict, opts.crit_limit, check_load=True)
 if opts.type == 'pinger':
-    check_pinger(mysql_dict, opts.config)
+    check_pinger(mysql_dict, flag_dict, opts.config)
