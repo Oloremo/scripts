@@ -143,7 +143,7 @@ def check_ok(mysql_dict, flag_dict):
             chdir(mysql_dict[inst]['datadir'])
             file = open_file(hostname + '.err')
             if file[-1].strip() != 'OK':
-                result.append('Mysql with datadir "%s" has problems: %s' % (mysql_dict[inst]['datadir'], file[1].strip()))
+                result.append('Mysql with datadir "%s" has problems: %s' % (mysql_dict[inst]['datadir'], file[-1].strip()))
 
     if result:
         print_list(result)
