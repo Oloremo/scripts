@@ -121,11 +121,11 @@ def pinger_mysql_execute(config, title, conn_string):
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
-        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s';") % conn_string
+        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s';" % conn_string)
         if int(cur.rowcount) is not 0:
             print "Record for this instance allready exist"
         else:
-            cur.execute("insert into remote_stor_ping values ('%s','iproto','4','','','%s', NULL, NULL);") % (title, conn_string)
+            cur.execute("insert into remote_stor_ping values ('%s','iproto','4','','','%s', NULL, NULL);" % (title, conn_string))
             db.commit()
             print "Success!"
     except Exception, err:
