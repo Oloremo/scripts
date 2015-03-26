@@ -259,7 +259,7 @@ def check_pinger(mysql_dict, flag_dict, config_file):
             if flag_dict[inst]['flag'] and flag_dict[inst]['stale']:
                 pinger_list.append('Stale backup flag found! %s is older than 60 min.' % flag_dict[inst]['file'])
             if not flag_dict[inst]['flag']:
-                if not check_ro(inst['socket']):
+                if not check_ro(mysql_dict[inst]['socket']):
                     if mysql_dict[inst]['bind-address'] == '0.0.0.0':
                         for ip in ip_list:
                             cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
