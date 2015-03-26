@@ -85,7 +85,7 @@ def search_not_wrapped(list):
     """ Looking through list and look for non wrapped lines """
     wrong_lines = []
     for string in list:
-        if string.strip() and not regexp in string:
+        if string.strip() and regexp not in string:
             wrong_lines.append(string)
     if len(wrong_lines) != 0:
         output("Input error. There is %s non wrapped lines inside %s" % (len(wrong_lines), error_file))
