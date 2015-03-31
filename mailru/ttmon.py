@@ -24,6 +24,8 @@ parser.add_option('-t', '--type', type='choice', action='store', dest='type',
                   help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc", "backup", "snaps"')
 parser.add_option("--json", action="store_true", dest="json_output_enabled",
                   help="Enable json output for some checks")
+parser.add_option("--timeout", type="float", dest="timeout", default=0.1,
+                  help="Number of seconds before connection and read timeout. Default: 0.1")
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-x", type="str", action="append", dest="ex_list", help="Exclude list of ports. This ports won't be cheked by 'pinger' check.")
@@ -42,7 +44,7 @@ proc_pattern = '.*(tarantool|octopus|octopus_rlimit).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 repl_status_list = ['replica/10', 'hot_standby/10']
 repl_fail_status = ['/fail:', '/failed']
-sock_timeout = 0.1
+sock_timeout = opts.timeout
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
                 'show info': ['recovery_lag', 'config', 'status', 'lsn'],
