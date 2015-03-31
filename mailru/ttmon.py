@@ -276,19 +276,21 @@ def make_tt_proc_list(pattern):
     tt_proc_list_loc = []
     p = re.compile(pattern)
     tt_proc_list_loc = [line for line in ps.splitlines() if p.match(line)]
-
     return tt_proc_list_loc
 
 def port_to_proc_title_compare(tt_proc_list, ports_set):
     port_title_type = {}
+    title_re = re.compile('@([^:\s]+)')
+
     for port in ports_set:
-        title_re = re.compile('@([^:\s]+)')
+        memc_re = re.compile('memc: %s' % port)
         for line in tt_proc_list:
             if port in line:
                 title = title_re.findall(line)
                 title = title[0].strip('@:') if title else 'unknown'
                 type = 'octopus' if 'octopus' in line else 'tarantool'
-                port_title_type[port] = {'title': title, 'type': type}
+                proto = 'memcached' if memc_re.search(line) else 'iproto'
+                port_title_type[port] = {'title': title, 'type': type, 'proto': proto}
 
     return port_title_type
 
@@ -504,10 +506,10 @@ def check_pinger(port_title_type, config_file):
         cur = db.cursor()
         for ip in ip_list:
             for port in port_title_type.keys():
-                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s';" % (ip, port))
+                cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s' and typ='%s';" % (ip, port, port_title_type[port]['proto']))
                 if int(cur.rowcount) is 0:
                     pinger_list.append('Octopus/Tarantool with ip:port %s:%s not found in pinger database!' % (ip, port))
-                    to_json[port] = {'title': port_title_type[port]['title'], 'ip': ip, 'type': port_title_type[port]['type']}
+                    to_json[port] = {'title': port_title_type[port]['title'], 'ip': ip, 'type': port_title_type[port]['type'], 'proto': port_title_type[port]['proto']}
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
