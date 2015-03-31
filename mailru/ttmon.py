@@ -275,9 +275,7 @@ def make_tt_proc_list(pattern):
     ps = subprocess.Popen(['ps', '-eo' 'args'], stdout=subprocess.PIPE).communicate()[0]
     tt_proc_list_loc = []
     p = re.compile(pattern)
-    for line in ps.splitlines():
-            if p.match(line):
-                    tt_proc_list_loc.append(line)
+    tt_proc_list_loc = [line for line in ps.splitlines() if p.match(line)]
 
     return tt_proc_list_loc
 
