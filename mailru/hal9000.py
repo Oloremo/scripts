@@ -117,7 +117,7 @@ def backup_mysql_execute(config, insert_tmpl, hostname, bk_type, rsync_host, mod
             print err
             exit(1)
 
-def pinger_mysql_execute(config, title, conn_string):
+def pinger_mysql_execute(config, title, proto, conn_string):
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
         cur = db.cursor()
@@ -125,7 +125,7 @@ def pinger_mysql_execute(config, title, conn_string):
         if int(cur.rowcount) is not 0:
             print "Record for this instance allready exist"
         else:
-            cur.execute("insert into remote_stor_ping values ('%s','iproto','4','','','%s', NULL, NULL);" % (title, conn_string))
+            cur.execute("insert into remote_stor_ping values ('%s','%s','4','','','%s', NULL, NULL);" % (title, proto, conn_string))
             db.commit()
             print "Success!"
     except Exception, err:
@@ -161,16 +161,17 @@ def add_pinger(config_file):
 
     if opts.auto:
         ping_dict = get_tt_json('pinger')
-        names_list = ['title', 'conn_string', 'type']
+        names_list = ['title', 'conn_string', 'type', 'proto']
 
         for port, inst in ping_dict.items():
             title = '%s-%s:%s' % (inst['title'], inst['ip'], port)
             conn_string = '%s:%s' % (inst['ip'], port)
             type = inst['type']
-            data_list = [title, conn_string, type]
+            proto = inst['proto']
+            data_list = [title, conn_string, type, proto]
 
             print_insert_data(names_list, data_list, 'pinger')
-            pinger_mysql_execute(config, title, conn_string)
+            pinger_mysql_execute(config, title, proto, conn_string)
 
 if opts.auto:
     #add_backup(opts.config, opts.type, 'auto', opts.bull, '0', '0')
