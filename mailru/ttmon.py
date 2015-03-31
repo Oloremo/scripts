@@ -16,7 +16,7 @@ from os.path import isfile, islink
 from netifaces import interfaces, ifaddresses
 
 ### Gotta catch 'em all!
-usage = "usage: %prog -t TYPE [-c LIMIT] [-w LIMIT] [-i LIMIT] [-x port_exlude] [--conf /path/to/conf] [--exit NUM]"
+usage = "usage: %prog -t TYPE [-x port_exlude] [--conf /path/to/conf] [--exit NUM] [--json]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
@@ -40,6 +40,7 @@ init_paths_list = ['/etc/init.d/tarantool*', '/etc/init.d/octopus*']
 init_exl_list = ['*.rpmsave', 'tarantool_opengraph_feeder', 'tarantool_opengraph', 'octopus', 'octopus-colander', 'tarantool', 'tarantool_box', 'tarantool-initd-wrapper']
 proc_pattern = '.*(tarantool|octopus|octopus_rlimit).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
+repl_status_list = ['replica/10', 'hot_standby/10']
 repl_fail_status = ['/fail:', '/failed']
 sock_timeout = 0.1
 crc_lag_limit = 2220
@@ -532,31 +533,36 @@ def check_backup(proc_dict, config_file):
         if proc_dict[instance]['check_error'] != '':
             backup_fail_list.append("Octopus/Tarantool with admin port %s runs on error: %s" % (proc_dict[instance]['aport'], proc_dict[instance]['check_error']))
             continue
-        if ' primary' in proc_dict[instance]['status']:
-            wd = proc_dict[instance]['work_dir'].strip('" ')
-            wd_snaps = wd + '/snaps'
-            wd_xlogs = wd + '/xlogs'
-            if islink(wd_snaps):
-                wd_snaps_orig = readlink(wd_snaps)
-            if islink(wd_xlogs):
-                wd_xlogs_orig = readlink(wd_xlogs)
 
-            try:
-                db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
-                cur = db.cursor()
-                if proc_dict[instance]['wal_writer_inbox_size'] != 0:
-                    cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
-                else:
-                    cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig))
-                if int(cur.rowcount) is 0:
-                    backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
-                    type = 'octopus' if 'octopus' in proc_dict[instance]['status'] else 'tarantool'
-                    to_json[proc_dict[instance]['aport']] = {'title': title_re.findall(proc_dict[instance]['status'])[0].strip('@:'), 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs}
-            except Exception, err:
-                    output('MySQL error. Check me.')
-                    ### We cant print exeption error here 'cos it can contain auth data
-                    #print err
-                    exit(1)
+        status = proc_dict[instance]['status'].lstrip()
+        wd = proc_dict[instance]['work_dir'].strip('" ')
+        wd_snaps = wd + '/snaps'
+        wd_xlogs = wd + '/xlogs'
+        if islink(wd_snaps):
+            wd_snaps_orig = readlink(wd_snaps)
+        if islink(wd_xlogs):
+            wd_xlogs_orig = readlink(wd_xlogs)
+
+        try:
+            db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
+            cur = db.cursor()
+            if 'primary' in status and proc_dict[instance]['wal_writer_inbox_size'] != 0:
+                cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
+            elif 'primary' in status and proc_dict[instance]['wal_writer_inbox_size'] is 0:
+                cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig))
+            elif any(pattern in status for pattern in repl_status_list) and proc_dict[instance]['wal_writer_inbox_size'] != 0:
+                cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s')" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
+            elif any(pattern in status for pattern in repl_status_list) and proc_dict[instance]['wal_writer_inbox_size'] is 0:
+                cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s')" % (hostname, wd_snaps, wd_snaps_orig))
+            if int(cur.rowcount) is 0:
+                backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
+                type = 'octopus' if 'octopus' in status else 'tarantool'
+                to_json[proc_dict[instance]['aport']] = {'title': title_re.findall(status.strip('@:'))[0], 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs}
+        except Exception, err:
+                output('MySQL error. Check me.')
+                ### We cant print exeption error here 'cos it can contain auth data
+                #print err
+                exit(1)
 
     if opts.json_output_enabled:
         print json.dumps(to_json)
