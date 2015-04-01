@@ -271,12 +271,14 @@ def check_pinger(mysql_dict, flag_dict, config_file):
                 if not check_ro(mysql_dict[inst]['socket']):
                     if mysql_dict[inst]['bind-address'] == '0.0.0.0':
                         for ip in ip_list:
-                            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%' and typ = 'dbi';", (ip,))
+                            sql_ip_like = '%' + ip + '%'
+                            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = 'dbi';", (sql_ip_like,))
                             if int(cur.rowcount) is 0:
                                 pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
                                 to_json[inst] = {'title': mysql_dict[inst]['db'], 'ip': ip, 'port': mysql_dict[inst]['port']}
                     else:
-                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%' and typ = 'dbi';", (mysql_dict[inst]['bind-address'],))
+                        sql_ip_like = '%' + mysql_dict[inst]['bind-address'] + '%'
+                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = 'dbi';", (sql_ip_like,))
                         if int(cur.rowcount) is 0:
                             pinger_list.append('Mysql with ip %s not found in pinger database!' % (mysql_dict[inst]['bind-address']))
                             to_json[inst] = {'title': inst, 'ip': ip}
