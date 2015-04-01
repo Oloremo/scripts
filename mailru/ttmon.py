@@ -528,7 +528,6 @@ def check_backup(proc_dict, config_file):
     fqdn = (socket.getfqdn())
     short = fqdn.split('.')[0]
     hostname = short + '.i'
-    title_re = re.compile('@([^:\s]+)')
     to_json = {}
 
     for instance in proc_dict.keys():
@@ -537,6 +536,7 @@ def check_backup(proc_dict, config_file):
             continue
 
         status = proc_dict[instance]['status'].lstrip()
+        title = proc_dict[instance]['title']
         wd = proc_dict[instance]['work_dir'].strip('" ')
         wd_snaps = wd + '/snaps'
         wd_xlogs = wd + '/xlogs'
@@ -559,7 +559,7 @@ def check_backup(proc_dict, config_file):
             if int(cur.rowcount) is 0:
                 backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
                 type = 'octopus' if 'octopus' in status else 'tarantool'
-                to_json[proc_dict[instance]['aport']] = {'title': title_re.findall(status.strip('@:'))[0], 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs}
+                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs}
         except Exception, err:
                 output('MySQL error. Check me.')
                 ### We cant print exeption error here 'cos it can contain auth data
@@ -686,6 +686,13 @@ if opts.type == 'backup':
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     proc_dict = make_proc_dict(adm_port_list, general_dict)
+
+    ports_set = set('')
+    ports_set |= set([port for port in proc_dict.keys()])
+
+    port_title = port_to_proc_title_compare(tt_proc_list, ports_set)
+    for inst in proc_dict.keys():
+        proc_dict[inst]['title'] = port_title[inst]['title']
 
     ### Check stuff
     check_backup(proc_dict, opts.config)
