@@ -552,14 +552,15 @@ def check_backup(proc_dict, config_file):
                 cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
             elif 'primary' in status and proc_dict[instance]['wal_writer_inbox_size'] is 0:
                 cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and skip_backup=0" % (hostname, wd_snaps, wd_snaps_orig))
-            elif any(pattern in status for pattern in repl_status_list) and proc_dict[instance]['wal_writer_inbox_size'] != 0:
+            elif [pattern for pattern in repl_status_list if status.startswith(pattern)] and proc_dict[instance]['wal_writer_inbox_size'] != 0:
                 cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s') and (tarantool_xlogs_dir='%s' or tarantool_xlogs_dir='%s')" % (hostname, wd_snaps, wd_snaps_orig, wd_xlogs, wd_xlogs_orig))
-            elif any(pattern in status for pattern in repl_status_list) and proc_dict[instance]['wal_writer_inbox_size'] is 0:
+            elif [pattern for pattern in repl_status_list if status.startswith(pattern)] and proc_dict[instance]['wal_writer_inbox_size'] is 0:
                 cur.execute("select * from server_backups where host = '%s' and (tarantool_snaps_dir='%s' or tarantool_snaps_dir='%s')" % (hostname, wd_snaps, wd_snaps_orig))
             if int(cur.rowcount) is 0:
                 backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
                 type = 'octopus' if 'octopus' in status else 'tarantool'
-                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs, 'work_dir': wd}
+                replica = True if [pattern for pattern in repl_status_list if status.startswith(pattern)] else False
+                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs, 'work_dir': wd, 'replica': replica}
         except Exception, err:
                 output('MySQL error. Check me.')
                 ### We cant print exeption error here 'cos it can contain auth data
