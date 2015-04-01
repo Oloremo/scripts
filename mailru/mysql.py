@@ -4,6 +4,7 @@ import MySQLdb
 import socket
 import os.path
 import time
+import stat
 import simplejson as json
 from sys import exit, stdout, version_info
 from optparse import OptionParser
@@ -13,24 +14,24 @@ from os import chdir
 from netifaces import interfaces, ifaddresses
 
 ### Gotta catch 'em all!
-usage = "usage: %prog -t TYPE [-c LIMIT] [-f FLAG]"
+usage = "usage: %prog -t TYPE [-c LIMIT] [--conf /path/to/conf] [--json]"
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                  choices=['ok', 'repl', 'load', 'pinger'],
-                  help='Check type. Chose from "ok", "repl", "load", "pinger"')
+                  choices=['ok', 'repl', 'load', 'pinger', 'backup'],
+                  help='Check type. Chose from "ok", "repl", "load", "pinger", "backup"')
 parser.add_option("-c", "--crit", type="int", dest="crit_limit",
                   help="Critical limit. Default: 100 for 'load' and 600 for 'repl'")
 parser.add_option("--conf", dest="config", type="str", default="/etc/mysql_mon.conf", help="Config file. Used in pinger and backup check. Default: /etc/mysql_mon.conf")
+parser.add_option("--json", action="store_true", dest="json_output_enabled",
+                  help="Enable json output for some checks")
 
 (opts, args) = parser.parse_args()
 
-if opts.type == 'load':
-        if not opts.crit_limit:
-                opts.crit_limit = 100
-elif opts.type == 'repl':
-        if not opts.crit_limit:
-                opts.crit_limit = 600
+if opts.type == 'load' and not opts.crit_limit:
+    opts.crit_limit = 100
+if opts.type == 'repl' and not opts.crit_limit:
+    opts.crit_limit = 600
 
 ### Global vars
 mysql_init_path = ['mysql-*']
@@ -64,12 +65,21 @@ def open_file(filename):
     except:
         raise Exception
 
-def load_json(file):
+def load_config(file, type):
     if not isfile(file):
-        print "file %s not found." % file
+        print "Config load error. File %s not found." % file
         exit(1)
-
-    return json.load(open(file))
+    try:
+        config = json.load(open(file))
+        if type in config:
+            return config[type]
+        else:
+            output('Cant load "%s" key from config %s' % (type, file))
+            exit(2)
+    except Exception, err:
+        output("Cant load config '%s'. Unhandled exeption. Check me." % file)
+        print err
+        exit(1)
 
 def print_list(list):
     """ Eh... well... it's printing the list... string by string... """
@@ -137,9 +147,7 @@ def check_ok(mysql_dict, flag_dict):
     result = []
 
     for inst in mysql_dict.keys():
-        if flag_dict[inst]['flag'] and flag_dict[inst]['stale']:
-            result.append('Stale backup flag found! %s is older than 60 min.' % flag_dict[inst]['file'])
-        if not flag_dict[inst]['flag']:
+        if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
             chdir(mysql_dict[inst]['datadir'])
             file = open_file(hostname + '.err')
             if file[-1].strip() != 'OK':
@@ -153,10 +161,12 @@ def check_ro(sock):
     cur = db.cursor()
     cur.execute("SELECT @@global.read_only;")
     row = cur.fetchone()
-    if row[0] == 1:
-        return True
-    else:
-        return False
+    return True if row[0] == 1 else False
+
+def check_backup_flag(file, flag, stale):
+    if flag and stale:
+        output('Stale backup flag found! %s is older than 60 min.' % file)
+    return False if flag else True
 
 def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False):
     """ Check replica lag or mysql proc count """
@@ -165,9 +175,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
     result_warning = []
 
     for inst in mysql_dict.keys():
-        if flag_dict[inst]['flag'] and flag_dict[inst]['stale']:
-            result_warning.append('Stale backup flag found! %s is older than 60 min.' % flag_dict[inst]['file'])
-        if not flag_dict[inst]['flag']:
+        if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
             try:
                 db = MySQLdb.connect(unix_socket=mysql_dict[inst]['socket'])
                 cur = db.cursor()
@@ -176,7 +184,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
                     cur.execute("show slave status")
                     ### We came to agreement what if where is nothing in "show slave status" we assume what it's master
                     if cur.rowcount == 0:
-                        exit(0)
+                        continue
 
                     ### Get values
                     row = cur.fetchone()
@@ -199,7 +207,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
                             result_critical.append('Mysql with datadir %s: process count is more than %s - %s' % (mysql_dict[inst]['datadir'], crit, cur.rowcount))
             except Exception, err:
                 output('Mysql monitoring error. Check me.')
-                print err
+                #print err
                 exit(1)
 
     ### Print result
@@ -229,54 +237,89 @@ def getip():
     else:
         return ip_list
 
+def check_lvm():
+    """ Check if /dev/mysql/data is exist and it's block device """
+
+    lvm_path = '/dev/mysql/data'
+    if os.path.exists(lvm_path):
+        return stat.S_ISBLK(os.stat(lvm_path)[stat.ST_MODE])
+    else:
+        output("LVM path '%s' is not found. Check me." % lvm_path)
+        exit(1)
+
 def check_pinger(mysql_dict, flag_dict, config_file):
     """ Check if mysql on this host is in pinger database """
 
     pinger_list = []
+    to_json = {}
     ip_list = getip()
 
-    try:
-        config_dict = load_json(config_file)
-    except Exception, err:
-        if 'IO_ERROR' in err:
-            print err
-            exit(1)
-        else:
-            output("Unhandled exeption. Check me.")
-            print err
-            exit(1)
-
-    if not config_dict['pinger']:
-        output('Cant load "pinger" key from config %s') % config_file
-    else:
-        config = config_dict['pinger']
+    config = load_config(config_file, 'pinger')
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
         db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1)
         cur = db.cursor()
         for inst in mysql_dict.keys():
-            if flag_dict[inst]['flag'] and flag_dict[inst]['stale']:
-                pinger_list.append('Stale backup flag found! %s is older than 60 min.' % flag_dict[inst]['file'])
-            if not flag_dict[inst]['flag']:
+            if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
                 if not check_ro(mysql_dict[inst]['socket']):
                     if mysql_dict[inst]['bind-address'] == '0.0.0.0':
                         for ip in ip_list:
-                            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (ip))
+                            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';", (ip,))
                             if int(cur.rowcount) is 0:
                                 pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
+                                to_json[inst] = {'title': mysql_dict[inst]['db'], 'ip': ip, 'port': mysql_dict[inst]['port']}
                     else:
-                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';" % (mysql_dict[inst]['bind-address']))
+                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like '%%:%s%%';", (mysql_dict[inst]['bind-address'],))
                         if int(cur.rowcount) is 0:
                             pinger_list.append('Mysql with ip %s not found in pinger database!' % (mysql_dict[inst]['bind-address']))
+                            to_json[inst] = {'title': inst, 'ip': ip}
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
             #print err
             exit(1)
 
-    if pinger_list:
+    if opts.json_output_enabled:
+        print json.dumps(to_json)
+    elif pinger_list:
         print_list(pinger_list)
+        exit(2)
+
+def check_backup(mysql_dict, flag_dict, config_file):
+    """ Check if mysql on this host is in backup database """
+
+    backup_list = []
+    to_json = {}
+    config = load_config(config_file, 'backup')
+    fqdn = (socket.getfqdn())
+    short = fqdn.split('.')[0]
+    hostname = short + '.i'
+
+    try:
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1)
+        cur = db.cursor()
+        for inst in mysql_dict.keys():
+            mysql_backup_dir = '/%s/data' % mysql_dict[inst]['db']
+            mysql_sock = mysql_dict[inst]['socket']
+            mysql_initscript = '/etc/init.d/%s' % inst
+            ### DELME
+            execute_vars = (hostname, '/dev/mysql/data1', mysql_backup_dir, mysql_sock, mysql_initscript)
+
+            cur.execute("select * from server_backups where host = %s and mysql_backup_vol = %s and mysql_backup_dir = %s and mysql_sock = %s and mysql_initscript = %s and skip_backup=0", execute_vars)
+            if int(cur.rowcount) is 0:
+                backup_list.append('Mysql with datadir "%s" not found in backup database!' % mysql_dict[inst]['datadir'])
+                to_json[inst] = {'mysql_backup_vol': '/dev/mysql/data', 'mysql_backup_dir': mysql_backup_dir, 'mysql_sock': mysql_sock, 'mysql_initscript': mysql_initscript}
+    except Exception, err:
+            output('MySQL error. Check me.')
+            ### We cant print exeption error here 'cos it can contain auth data
+            #print err
+            exit(1)
+
+    if opts.json_output_enabled:
+        print json.dumps(to_json)
+    elif backup_list:
+        print_list(backup_list)
         exit(2)
 
 ### Make depended things
@@ -293,3 +336,6 @@ if opts.type == 'load':
     check_mysql(mysql_dict, flag_dict, opts.crit_limit, check_load=True)
 if opts.type == 'pinger':
     check_pinger(mysql_dict, flag_dict, opts.config)
+if opts.type == 'backup':
+    check_lvm()
+    check_backup(mysql_dict, flag_dict, opts.config)
