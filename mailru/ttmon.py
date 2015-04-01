@@ -559,7 +559,7 @@ def check_backup(proc_dict, config_file):
             if int(cur.rowcount) is 0:
                 backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
                 type = 'octopus' if 'octopus' in status else 'tarantool'
-                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs}
+                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs, 'work_dir': wd}
         except Exception, err:
                 output('MySQL error. Check me.')
                 ### We cant print exeption error here 'cos it can contain auth data
