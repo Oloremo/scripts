@@ -303,8 +303,7 @@ def check_backup(mysql_dict, flag_dict, config_file):
             mysql_backup_dir = '/%s/data' % mysql_dict[inst]['db']
             mysql_sock = mysql_dict[inst]['socket']
             mysql_initscript = '/etc/init.d/%s' % inst
-            ### DELME
-            execute_vars = (hostname, '/dev/mysql/data1', mysql_backup_dir, mysql_sock, mysql_initscript)
+            execute_vars = (hostname, '/dev/mysql/data', mysql_backup_dir, mysql_sock, mysql_initscript)
 
             cur.execute("select * from server_backups where host = %s and mysql_backup_vol = %s and mysql_backup_dir = %s and mysql_sock = %s and mysql_initscript = %s and skip_backup=0", execute_vars)
             if int(cur.rowcount) is 0:
