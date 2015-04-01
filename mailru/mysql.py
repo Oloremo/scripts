@@ -247,6 +247,12 @@ def check_lvm():
         output("LVM path '%s' is not found. Check me." % lvm_path)
         exit(1)
 
+def check_am_i_backup():
+
+    am_backup_file = open_file('/var/tmp/am_i_backup.txt')
+    if 'YES' not in am_backup_file[0]:
+        exit(0)
+
 def check_pinger(mysql_dict, flag_dict, config_file):
     """ Check if mysql on this host is in pinger database """
 
@@ -336,5 +342,6 @@ if opts.type == 'load':
 if opts.type == 'pinger':
     check_pinger(mysql_dict, flag_dict, opts.config)
 if opts.type == 'backup':
+    check_am_i_backup()
     check_lvm()
     check_backup(mysql_dict, flag_dict, opts.config)
