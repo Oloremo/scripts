@@ -132,21 +132,33 @@ def add_backup(config_file, type, skip_check=0, skip_backup=0, backup_retention=
         bk_dict = get_tt_json('backup')
         bk_type = 'tarantool'
         select_tmpl = "select * from server_backups where host = %s and (tarantool_snaps_dir = %s or tarantool_snaps_dir = %s)"
-        insert_tmpl = "insert into backup.server_backups (host, type, rsync_host, rsync_modulepath, backup_retention, machine_retention, gzip_period, tarantool_snaps_dir, tarantool_xlogs_dir, skip_check, skip_backup, optfile_list) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '')"
-        names_list = ['hostname', 'rsync_host', 'type', 'module', 'snaps_dir', 'xlogs_dir', 'backup_retention', 'machine_retention', 'skip_check', 'skip_backup']
 
         for inst in bk_dict.keys():
-            rsync_module = 'my_backup/%s/%s/%s' % (bk_dict[inst]['type'], short, bk_dict[inst]['title'])
-            rsync_host = get_bull()
             wd = bk_dict[inst]['work_dir'].strip('" ')
             wd_snaps = wd + '/snaps'
             wd_snaps_orig = readlink(wd_snaps) if islink(wd_snaps) else wd_snaps
 
-            data_list = [hostname, rsync_host, bk_type, rsync_module, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], backup_retention, machine_retention, skip_check, skip_backup]
-            print_insert_data(names_list, data_list, 'backup')
+            if not bk_dict[inst]['replica']:
+                insert_tmpl = "insert into backup.server_backups (host, type, rsync_host, rsync_modulepath, backup_retention, machine_retention, gzip_period, tarantool_snaps_dir, tarantool_xlogs_dir, skip_check, skip_backup, optfile_list) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '')"
+                names_list = ['hostname', 'rsync_host', 'type', 'module', 'snaps_dir', 'xlogs_dir', 'backup_retention', 'machine_retention', 'skip_check', 'skip_backup']
+                rsync_module = 'my_backup/%s/%s/%s' % (bk_dict[inst]['type'], short, bk_dict[inst]['title'])
+                rsync_host = get_bull()
 
-            select_data = (hostname, wd_snaps, wd_snaps_orig)
-            insert_data = (hostname, bk_type, rsync_host, rsync_module, backup_retention, machine_retention, gzip_period, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], skip_check, skip_backup)
+                data_list = [hostname, rsync_host, bk_type, rsync_module, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], backup_retention, machine_retention, skip_check, skip_backup]
+                print_insert_data(names_list, data_list, 'backup')
+
+                select_data = (hostname, wd_snaps, wd_snaps_orig)
+                insert_data = (hostname, bk_type, rsync_host, rsync_module, backup_retention, machine_retention, gzip_period, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], skip_check, skip_backup)
+            else:
+                skip_backup = 1
+                insert_tmpl = "insert into backup.server_backups (host, type, machine_retention, tarantool_snaps_dir, tarantool_xlogs_dir, skip_check, skip_backup, optfile_list) values (%s, %s, %s, %s, %s, %s, %s, '')"
+                names_list = ['hostname', 'type', 'snaps_dir', 'xlogs_dir', 'machine_retention', 'skip_check', 'skip_backup']
+
+                data_list = [hostname, bk_type, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], machine_retention, skip_check, skip_backup]
+                print_insert_data(names_list, data_list, 'backup')
+
+                select_data = (hostname, wd_snaps, wd_snaps_orig)
+                insert_data = (hostname, bk_type, machine_retention, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], skip_check, skip_backup)
             mysql_execute(config, select_tmpl, select_data, insert_tmpl, insert_data)
 
     if opts.auto and type == 'mysql':
