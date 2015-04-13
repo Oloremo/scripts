@@ -13,7 +13,7 @@ parser = OptionParser(usage=usage)
 parser.add_option("-f", "--file", dest="error_file", default="/var/tmp/error.txt",
                   help="Path to file to check. Default: /var/tmp/error.txt")
 parser.add_option("--ldict", dest="ldict_file", default="/etc/ratelimit.conf",
-                  help="Path to file to file with custom limits. Default: /etc/restalimit.conf")
+                  help="Path to file to file with custom limits. Default: /etc/ratelimit.conf")
 parser.add_option("--odict", dest="odict_file", default="/usr/local/etc/onlineconf/monitoring.conf",
                   help="Path to file to file with custom limits. Default: /usr/local/etc/onlineconf/monitoring.conf")
 parser.add_option("-c", "--crit", type="int", dest="critical", default=5,
@@ -184,7 +184,7 @@ result_warning = []
 result_info = []
 daemons_dict = {}
 
-limits_dict = load_limits_dict('options.ldict_file', 'options.odict_file')
+limits_dict = load_limits_dict(options.ldict_file, options.odict_file)
 
 for daemon in uniq_daemons:
     limits = set_limits(limits_dict, daemon, options.critical, options.warning, options.delta)
