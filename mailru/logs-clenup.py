@@ -31,21 +31,24 @@ def limit_to_unixtime(limit):
         return False
 
 def is_dir_in_limits(dir, limits_dict):
+    limit = limits_dict['DEFAULT']
     for key in limits_dict.keys():
-        return limits_dict[key] if key in dir else limits_dict['DEFAULT']
+        if key in dir:
+            limit = limits_dict[key]
+    return limit
 
 def cleanup(dirname, filenames, limit):
     for file in filenames:
         fullpath = dirname + '/' + file
         if limit_to_unixtime(limit):
-            if os.stat(fullpath).st_mtime < now - limit_to_unixtime(limit):
+            if os.lstat(fullpath).st_mtime < now - limit_to_unixtime(limit):
                 print 'Deleting %s, older than %s' % (fullpath, limit)
-                os.remove(fullpath)
+                os.unlink(fullpath)
         else:
             print "Limits type for %s is not 'days' or 'mins' - cant do shit. Fix it!" % file
             continue
 
-print "%s - Starting... " % print_timestamp()
+print "\n\n%s - Starting... " % print_timestamp()
 print '%s - Loading config...' % print_timestamp()
 limits = load_config('/usr/local/etc/logs-cleanup.conf')
 
