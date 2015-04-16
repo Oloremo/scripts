@@ -191,9 +191,9 @@ def add_pinger(config_file, type):
         select_tmpl = "select * from remote_stor_ping where connect_str = %s"
         insert_tmpl = "insert into remote_stor_ping values (%s, %s, '4', '', '', %s, NULL, NULL)"
 
-        for port, inst in ping_dict.items():
-            title = '%s-%s:%s' % (inst['title'], inst['ip'], port)
-            conn_string = '%s:%s' % (inst['ip'], port)
+        for inst in ping_dict.values():
+            title = '%s-%s:%s' % (inst['title'], inst['ip'], inst['port'])
+            conn_string = '%s:%s' % (inst['ip'], inst['port'])
             type = inst['type']
             proto = inst['proto']
 
