@@ -24,8 +24,6 @@ parser.add_option('-t', '--type', type='choice', action='store', dest='type',
                   help='Check type. Chose from "slab", "repl", "infr_cvp", "infr_pvc", "infr_ivc", "pinger", "octopus_crc", "backup", "snaps"')
 parser.add_option("--json", action="store_true", dest="json_output_enabled",
                   help="Enable json output for some checks")
-parser.add_option("--timeout", type="float", dest="timeout", default=0.1,
-                  help="Number of seconds before connection and read timeout. Default: 0.1")
 
 group = OptionGroup(parser, "Ajusting limits")
 group.add_option("-x", type="str", action="append", dest="ex_list", help="Exclude list of ports. This ports won't be cheked by 'pinger' check.")
@@ -44,7 +42,6 @@ proc_pattern = '.*(tarantool|octopus|octopus_rlimit).* adm:.*\d+.*'
 octopus_repl_pattern = '.*(octopus: box:hot_standby).* adm:.*\d+.*'
 repl_status_list = ['replica/10', 'hot_standby/10']
 repl_fail_status = ['/fail:', '/failed']
-sock_timeout = opts.timeout
 crc_lag_limit = 2220
 general_dict = {'show slab': ['items_used', 'arena_used', 'waste'],
                 'show info': ['recovery_lag', 'config', 'status', 'lsn'],
@@ -208,10 +205,11 @@ def make_cfg_dict(cfg_list):
 
     return cfg_dict_loc
 
-def make_proc_dict(adm_port_list, lookup_dict, host='localhost'):
+def make_proc_dict(adm_port_list, lookup_dict, int_conf, host='localhost'):
     """ Making dict from running tt\octopus """
 
     adm_dict_loc = {}
+    sock_timeout = int_conf['sock_timeout'] if 'sock_timeout' in int_conf else 0.1
 
     for aport in adm_port_list:
         try:
@@ -616,6 +614,9 @@ def check_snaps(proc_dict, config_file):
         print_list(problems)
         exit(2)
 
+### Load internal config
+int_conf = load_config(opts.config, 'internal')
+
 ### Do the work
 if opts.type == 'infr_cvp':
     ### Make stuff
@@ -633,7 +634,7 @@ if opts.type == 'infr_pvc':
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
     cfg_list = make_paths_list(cfg_paths_list, cfg_excl_re)
     cfg_dict = make_cfg_dict(cfg_list)
-    proc_dict = make_proc_dict(adm_port_list, general_dict)
+    proc_dict = make_proc_dict(adm_port_list, general_dict, int_conf)
 
     ### Check stuff
     check_infrastructure(opts.exit_code, infr_pvc=True)
@@ -650,7 +651,7 @@ if opts.type == 'slab':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
-    proc_dict = make_proc_dict(adm_port_list, general_dict)
+    proc_dict = make_proc_dict(adm_port_list, general_dict, int_conf)
 
     ### Check stuff
     check_stats(proc_dict, opts.config)
@@ -659,7 +660,7 @@ if opts.type == 'repl':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
-    proc_dict = make_proc_dict(adm_port_list, general_dict)
+    proc_dict = make_proc_dict(adm_port_list, general_dict, int_conf)
 
     ### Check stuff
     check_stats(proc_dict, opts.config, check_repl=True)
@@ -686,7 +687,7 @@ if opts.type == 'backup':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
-    proc_dict = make_proc_dict(adm_port_list, general_dict)
+    proc_dict = make_proc_dict(adm_port_list, general_dict, int_conf)
 
     ports_set = set('')
     ports_set |= set([port for port in proc_dict.keys()])
@@ -702,7 +703,7 @@ if opts.type == 'octopus_crc':
     ### Make stuff
     tt_proc_list = make_tt_proc_list(octopus_repl_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
-    proc_dict = make_proc_dict(adm_port_list, crc_check_dict)
+    proc_dict = make_proc_dict(adm_port_list, crc_check_dict, int_conf)
 
     ### Check stuff
     check_crc(adm_port_list, proc_dict, crc_lag_limit)
@@ -710,6 +711,6 @@ if opts.type == 'octopus_crc':
 if opts.type == 'snaps':
     tt_proc_list = make_tt_proc_list(proc_pattern)
     adm_port_list = make_port_list(tt_proc_list, ' adm:\s*\d+')
-    proc_dict = make_proc_dict(adm_port_list, general_dict)
+    proc_dict = make_proc_dict(adm_port_list, general_dict, int_conf)
 
     check_snaps(proc_dict, opts.config)
