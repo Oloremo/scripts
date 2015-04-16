@@ -509,7 +509,7 @@ def check_pinger(port_title_type, config_file):
                 cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str='%s:%s' and typ='%s';" % (ip, port, port_title_type[port]['proto']))
                 if int(cur.rowcount) is 0:
                     pinger_list.append('Octopus/Tarantool with ip:port %s:%s not found in pinger database!' % (ip, port))
-                    to_json[port] = {'title': port_title_type[port]['title'], 'ip': ip, 'type': port_title_type[port]['type'], 'proto': port_title_type[port]['proto']}
+                    to_json[ip + ':' + port] = {'title': port_title_type[port]['title'], 'ip': ip, 'port': port, 'type': port_title_type[port]['type'], 'proto': port_title_type[port]['proto']}
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
