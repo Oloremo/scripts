@@ -15,7 +15,7 @@ usage = "usage: %prog "
 
 parser = OptionParser(usage=usage)
 parser.add_option('-t', '--type', type='choice', action='store', dest='type',
-                  choices=['mysql', 'tt'],
+                  choices=['mysql', 'tt', 'memc'],
                   help='Backup type. Chose from "mysql", "tt"')
 parser.add_option("--conf", dest="config", type="str", default="/etc/hal9000.conf", help="Config file. Default: /etc/hal9000.conf")
 parser.add_option("-b", action="store_true", dest="batch", help="Enable batch mode")
@@ -59,6 +59,10 @@ def yes_no():
 
 def get_tt_json(type):
     tt_json = subprocess.Popen(['/etc/snmp/bin/ttmon.py', '-t', type, '--json'], stdout=subprocess.PIPE).communicate()[0]
+    return json.loads(tt_json)
+
+def get_memc_json():
+    tt_json = subprocess.Popen(['/etc/snmp/bin/memc.py', '--json'], stdout=subprocess.PIPE).communicate()[0]
     return json.loads(tt_json)
 
 def get_mysql_json(type):
@@ -188,7 +192,7 @@ def add_pinger(config_file, type):
     if opts.auto and type == 'tt':
         ping_dict = get_tt_json('pinger')
         names_list = ['title', 'conn_string', 'type', 'proto']
-        select_tmpl = "select * from remote_stor_ping where connect_str = %s"
+        select_tmpl = "select * from remote_stor_ping where connect_str = %s and typ = %s"
         insert_tmpl = "insert into remote_stor_ping values (%s, %s, '4', '', '', %s, NULL, NULL)"
 
         for inst in ping_dict.values():
@@ -200,7 +204,24 @@ def add_pinger(config_file, type):
             data_list = [title, conn_string, type, proto]
             print_insert_data(names_list, data_list, 'pinger')
 
-            select_data = (conn_string,)
+            select_data = (conn_string, 'iproto')
+            insert_data = (title, proto, conn_string)
+            mysql_execute(config, select_tmpl, select_data, insert_tmpl, insert_data)
+    elif opts.auto and type == 'memc':
+        ping_dict = get_memc_json()
+        names_list = ['title', 'conn_string', 'proto']
+        select_tmpl = "select * from remote_stor_ping where connect_str = %s and typ = %s"
+        insert_tmpl = "insert into remote_stor_ping values (%s, %s, '4', '', '', %s, NULL, NULL)"
+
+        for inst in ping_dict.values():
+            title = 'memcached-%s-%s:%s' % (inst['title'], inst['ip'], inst['port'])
+            conn_string = '%s:%s' % (inst['ip'], inst['port'])
+            proto = inst['proto']
+
+            data_list = [title, conn_string, proto]
+            print_insert_data(names_list, data_list, 'pinger')
+
+            select_data = (conn_string, 'memcached')
             insert_data = (title, proto, conn_string)
             mysql_execute(config, select_tmpl, select_data, insert_tmpl, insert_data)
 
