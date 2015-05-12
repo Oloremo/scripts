@@ -9,7 +9,8 @@ import os
 import fcntl
 import errno
 import tarfile
-from sys import exit, stdout
+import logging
+from sys import exit
 from os.path import isfile, isdir
 from optparse import OptionParser
 from time import time, localtime, strftime, sleep
@@ -31,6 +32,10 @@ parser.add_option("--tmpdir", dest="tmpdir", type="str", default="",
                   help="Config file. Default: /etc/hal9000.conf")
 parser.add_option("--timeout", dest="timeout", type="int", default=5,
                   help="File lock timeout Default: 5")
+parser.add_option("--log", type="str", dest="log_file", default="/var/log/mailru/hulk.log",
+                  help="Path to log file. Default: /var/log/mailru/hulk.log")
+parser.add_option('--log_level', type='choice', action='store', dest='loglevel', default='INFO',
+                  choices=['INFO', 'WARNING', 'CRITICAL', 'DEBUG'], help='Log level. Choose from: INFO, WARNING, CRITICAL and DEBUG. Default is INFO')
 
 
 (opts, args) = parser.parse_args()
@@ -45,33 +50,31 @@ if not opts.mode:
 ### Global
 now = time()
 backup_time = strftime('%d.%m.%Y_%H%M', localtime())
+log_file = opts.log_file
+error_file = '/var/tmp/hulk-'
+loglevel = logging.getLevelName(opts.loglevel)
 
-def output(line):
-    stdout.write(str(line) + "<br>")
-    stdout.flush()
-
-def print_timestamp():
-    return strftime('%d %b %Y %H:%M:%S', localtime())
 
 def load_config(file, type):
+    logger.info('Loading config file "%s"' % file)
     if not isfile(file):
-        print "Config load error. File %s not found." % file
+        logger.critical('Config load error. File %s not found.' % file)
         exit(1)
     try:
         config = json.load(open(file))
         if type in config:
             return config[type]
         else:
-            output('Cant load "%s" key from config %s' % (type, file))
+            logger.critical('Cant load "%s" key from config %s' % (type, file))
             exit(2)
-    except Exception, err:
-        output("Unhandled exeption. Check me.")
-        print err
+    except Exception:
+        logger.exception('Unhandled exeption. Check me.')
         exit(1)
 
 def get_conf(config_file, type, hostname):
     """ Get backup configuration from dracula database """
 
+    logger.info('Loading config for this host from dracula')
     config = load_config(config_file, 'backup')
     select_tmpl = "select * from backup.server_backups where host = %s and type= %s"
     select_data = (hostname, type)
@@ -81,27 +84,19 @@ def get_conf(config_file, type, hostname):
         cur = db.cursor()
         cur.execute(select_tmpl, select_data)
         if int(cur.rowcount) is 0:
-            print "Cant find any records in dracula db for hostname '%s' and type '%s'" % (hostname, type)
+            logger.warning("Can't find any records in dracula db for hostname '%s' and type '%s'" % (hostname, type))
         else:
             return cur.fetchall()
-    except Exception, err:
-            output('MySQL error. Check me.')
-            print err
-            ### We cant print exeption error here 'cos it can contain auth data
+    except Exception:
+            logger.exception('MySQL error. Check me.')
             exit(1)
-
-def write_to_err_file(type, error):
-
-    filename = '/var/tmp/hulk-%s.txt' % type
-    with open(filename, 'w') as error_file:
-        error_file.write('%s - %s\n' % (print_timestamp(), error))
 
 def create_rsync_dirs(inst, hostname, type):
 
     rsync_root = '/tmp/rsync_tmpl/'
     inst_name = inst['base_dir'].split('/')[-1]
     fullpath = '%s%s/%s/%s/%s' % (rsync_root, inst['type'], hostname, inst_name, type)
-    print "Creating backup dir structure: %s" % fullpath
+    logger.info("Creating backup dir structure: %s" % fullpath)
 
     rmtree(rsync_root, ignore_errors=True)
 
@@ -123,13 +118,22 @@ def rsync_files(root_dir, files, exclude, rsync_args, host, module, module_path,
         rsync_run = '%s %s %s %s' % (rsync, rsync_args, root_dir, rsync_host)
     my_env = os.environ.copy()
     my_env['RSYNC_PASSWORD'] = rsync_pass
+    sp = subprocess.Popen(rsync_run, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, env=my_env)
 
     ### FIXME
-    print "Executing: %s" % rsync_run
-    rsync_output = subprocess.Popen(rsync_run, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, env=my_env).communicate()
-    #print rsync_output
+    logger.info("Executing: %s" % rsync_run)
+    rsync_output = sp.communicate()
+    exitcode = sp.returncode
+    logger.debug("Exitcode is: %i" % exitcode)
+    if rsync_output[0] and exitcode is 0:
+        for line in rsync_output[0].splitlines():
+            logger.debug("%s" % line)
+    if exitcode != 0:
+        logger.critical("Rsync return error:")
+        for line in rsync_output[0].splitlines():
+            logger.critical("%s" % line)
     if rsync_output[1]:
-        write_to_err_file(type, rsync_output[1])
+        logger.critical("Rsync return error: %s" % rsync_output[1])
 
 def lock_file(file, timeout):
 
@@ -149,14 +153,15 @@ def lock_file(file, timeout):
 
 def copy_file(path_to_file, tmp_fullpath, timeout):
 
-    print "Copying %s to %s" % (path_to_file, tmp_fullpath)
+    logger.info("Copying %s to %s" % (path_to_file, tmp_fullpath))
     file = open(path_to_file, 'r')
     if lock_file(file, timeout):
         copyfile(path_to_file, tmp_fullpath)
         fcntl.flock(file, fcntl.LOCK_UN)
         file.close()
     else:
-        print "Cant' acquire lock for %s seconds, giving up!" % timeout
+        logger.warning("Cant' acquire lock for %s seconds, giving up!" % timeout)
+        logger.critical("Cant' acquire lock for %s seconds, giving up!" % timeout)
         file.close()
 
 def make_tarfile(output_filename, source_dir):
@@ -164,8 +169,9 @@ def make_tarfile(output_filename, source_dir):
     tar.add(source_dir, arcname=os.path.basename(source_dir))
 
 def clenup(inst, type):
-    oldest_snap = sorted(os.listdir(inst['base_dir'] + '/snaps'))[-1]
-    oldest_snap_lsn = int(oldest_snap.split('.')[0])
+    oldest_snap = sorted(os.listdir(inst['base_dir'] + '/snaps'))[-1] if os.listdir(inst['base_dir'] + '/xlogs') else ''
+    oldest_xlog = sorted(os.listdir(inst['base_dir'] + '/xlogs'))[-1] if os.listdir(inst['base_dir'] + '/xlogs') else ''
+    oldest_snap_lsn = int(oldest_snap.split('.')[0]) if oldest_snap else 0
     limit = inst['machine_retention'] if int(inst['machine_retention']) > 0 else 1
     limit_ut = limit * 86400
 
@@ -174,14 +180,14 @@ def clenup(inst, type):
         for file in [file for file in os.listdir(base_dir) if file != oldest_snap]:
             fullpath = base_dir + '/' + file
             if os.lstat(fullpath).st_mtime < now - limit_ut:
-                print 'Deleting %s, older than %s days' % (fullpath, limit)
+                logger.info('Deleting %s, older than %s days' % (fullpath, limit))
                 os.unlink(fullpath)
     if type == 'xlogs':
         base_dir = inst['base_dir'] + '/' + type
-        for file in [file for file in os.listdir(base_dir) if int(file.split('.')[0]) < oldest_snap_lsn]:
+        for file in [file for file in os.listdir(base_dir) if int(file.split('.')[0]) < oldest_snap_lsn and file != oldest_xlog]:
             fullpath = base_dir + '/' + file
             if os.lstat(fullpath).st_mtime < now - limit_ut:
-                print 'Deleting %s, older than %s days' % (fullpath, limit)
+                logger.info('Deleting %s, older than %s days' % (fullpath, limit))
                 os.unlink(fullpath)
 
 def backup(inst_dict, type, hostname, global_tmpdir, timeout):
@@ -215,14 +221,14 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
                             fullpath = root + '/' + file
                             tmp_fullpath = tmpdir + root + '/' + file
                             copy_file(fullpath, tmp_fullpath, timeout)
-                print "Making tar at %s" % xdata_base_dir
+                logger.info("Making tar for %s as %s" % (xdata_base_dir, tar_name))
                 make_tarfile(tar_name, xdata_base_dir + '/')
                 tars[xdata].append(tar_name)
 
             for xdata in tars.keys():
                 tmpdir = global_tmpdir if global_tmpdir else base_dir + '/' + xdata + '/backup_temp'
                 rsync_files(base_dir, tars[xdata], False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
-                print "Deleting temp dir: %s" % tmpdir
+                logger.info("Deleting temp dir: %s" % tmpdir)
                 rmtree(tmpdir)
 
         elif type == 'snaps' or type == 'xlogs':
@@ -236,6 +242,28 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
             files = inst['optfile_list'].split(',')
             rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
 
+###Logger init
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+mainlog = logging.FileHandler(log_file)
+error_log = logging.FileHandler(error_file + opts.type + '.txt', mode='a')
+
+mainlog.setLevel(loglevel)
+error_log.setLevel(logging.CRITICAL)
+
+format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+eformat = logging.Formatter('%(asctime)s  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
+mainlog.setFormatter(format)
+error_log.setFormatter(eformat)
+
+logger.addHandler(mainlog)
+logger.addHandler(error_log)
+logger.info('=====================================================================================================')
+logger.info('Started')
+logger.info('Backup type is "%s". Mode is "%s"' % (opts.type, opts.mode))
+
 ### Hostname
 fqdn = (socket.getfqdn())
 short = fqdn.split('.')[0]
@@ -243,3 +271,4 @@ hostname = short + '.i'
 
 inst_dict = get_conf(opts.config, 'silver', hostname)
 backup(inst_dict, opts.mode, short, opts.tmpdir, opts.timeout)
+logger.info("Finished")
