@@ -87,7 +87,7 @@ def check_pinger(memc_dict, config_file):
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
-        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1, read_timeout=1)
         cur = db.cursor()
         for ip in ip_list:
             for name, port in memc_dict.items():
