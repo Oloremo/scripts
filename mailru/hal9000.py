@@ -109,7 +109,7 @@ def get_bull():
 
 def mysql_execute(config, select_tmpl, select_data, insert_tmpl, insert_data):
     try:
-        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'])
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1, read_timeout=1)
         cur = db.cursor()
         ### Check if it's allready exist
         cur.execute(select_tmpl, select_data)
