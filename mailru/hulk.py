@@ -80,7 +80,7 @@ def get_conf(config_file, type, hostname):
     select_data = (hostname, type)
 
     try:
-        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], cursorclass=MySQLdb.cursors.DictCursor)
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], cursorclass=MySQLdb.cursors.DictCursor, connect_timeout=1, read_timeout=1)
         cur = db.cursor()
         cur.execute(select_tmpl, select_data)
         if int(cur.rowcount) is 0:
