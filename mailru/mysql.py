@@ -177,7 +177,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
     for inst in mysql_dict.keys():
         if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
             try:
-                db = MySQLdb.connect(unix_socket=mysql_dict[inst]['socket'])
+                db = MySQLdb.connect(unix_socket=mysql_dict[inst]['socket'], connect_timeout=1, read_timeout=1)
                 cur = db.cursor()
 
                 if check_repl:
@@ -264,7 +264,7 @@ def check_pinger(mysql_dict, flag_dict, config_file):
 
     ### Connect to db and check remote_stor_ping table for ip:port on this host
     try:
-        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1)
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1, read_timeout=1)
         cur = db.cursor()
         for inst in mysql_dict.keys():
             if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
@@ -305,7 +305,7 @@ def check_backup(mysql_dict, flag_dict, config_file):
     hostname = short + '.i'
 
     try:
-        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1)
+        db = MySQLdb.connect(host=config['host'], user=config['user'], passwd=config['pass'], db=config['db'], connect_timeout=1, read_timeout=1)
         cur = db.cursor()
         for inst in mysql_dict.keys():
             mysql_backup_dir = '/%s/data' % mysql_dict[inst]['db']
