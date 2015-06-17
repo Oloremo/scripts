@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import MySQLdb
+import MySQLdb.cursors
 import socket
 import os.path
 import time
@@ -177,7 +178,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
     for inst in mysql_dict.keys():
         if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
             try:
-                db = MySQLdb.connect(unix_socket=mysql_dict[inst]['socket'], connect_timeout=1, read_timeout=1)
+                db = MySQLdb.connect(unix_socket=mysql_dict[inst]['socket'], cursorclass=MySQLdb.cursors.DictCursor, connect_timeout=1, read_timeout=1)
                 cur = db.cursor()
 
                 if check_repl:
@@ -186,12 +187,7 @@ def check_mysql(mysql_dict, flag_dict, crit, check_repl=False, check_load=False)
                     if cur.rowcount == 0:
                         continue
 
-                    ### Get values
-                    row = cur.fetchone()
-                    ### Get keys
-                    field_names = [i[0] for i in cur.description]
-                    ### Make dict
-                    slave_dict = dict(zip(field_names, row))
+                    slave_dict = cur.fetchone()
 
                     if slave_dict['Slave_IO_Running'] == 'Yes' and slave_dict['Slave_SQL_Running'] == 'Yes':
                         if slave_dict['Seconds_Behind_Master'] >= crit:
@@ -250,13 +246,32 @@ def check_lvm():
 def check_am_i_backup():
 
     am_backup_file = open_file('/var/tmp/am_i_backup.txt')
-    if 'YES' not in am_backup_file[0]:
+    if 'YES' not in am_backup_file[0] and opts.json_output_enabled:
+        print '{}'
         exit(0)
+    elif 'YES' not in am_backup_file[0]:
+        exit(0)
+
+def mysql_execute(cur, mysql_dict, ip_list, select_tmpl, ro):
+
+    ip_count_dict = {}
+    if mysql_dict['bind-address'] == '0.0.0.0':
+        for ip in ip_list:
+            sql_ip_like = '%' + ip + '%'
+            select_data = (sql_ip_like, 'dbi', 'select 1') if ro else (sql_ip_like, 'dbi', 'update ping_test')
+            cur.execute(select_tmpl, select_data)
+            ip_count_dict[ip] = {'row_count': int(cur.rowcount), 'ip': ip, 'port': mysql_dict['port'], 'db': mysql_dict['db'], 'ro': ro}
+    else:
+        sql_ip_like = '%' + mysql_dict['bind-address'] + '%'
+        select_data = (sql_ip_like, 'dbi', 'select 1') if ro else (sql_ip_like, 'dbi', 'update ping_test')
+        cur.execute(select_tmpl, select_data)
+        ip_count_dict[mysql_dict['bind-address']] = {'row_count': int(cur.rowcount), 'ip': mysql_dict['bind-address'], 'port': mysql_dict['port'], 'db': mysql_dict['db'], 'ro': ro}
+
+    return ip_count_dict
 
 def check_pinger(mysql_dict, flag_dict, config_file):
     """ Check if mysql on this host is in pinger database """
 
-    pinger_list = []
     to_json = {}
     ip_list = getip()
 
@@ -268,31 +283,29 @@ def check_pinger(mysql_dict, flag_dict, config_file):
         cur = db.cursor()
         for inst in mysql_dict.keys():
             if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
-                if not check_ro(mysql_dict[inst]['socket']):
-                    if mysql_dict[inst]['bind-address'] == '0.0.0.0':
-                        for ip in ip_list:
-                            sql_ip_like = '%' + ip + '%'
-                            cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = 'dbi';", (sql_ip_like,))
-                            if int(cur.rowcount) is 0:
-                                pinger_list.append('Mysql with ip %s not found in pinger database!' % (ip))
-                                to_json[inst] = {'title': mysql_dict[inst]['db'], 'ip': ip, 'port': mysql_dict[inst]['port']}
-                    else:
-                        sql_ip_like = '%' + mysql_dict[inst]['bind-address'] + '%'
-                        cur.execute("SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = 'dbi';", (sql_ip_like,))
-                        if int(cur.rowcount) is 0:
-                            pinger_list.append('Mysql with ip %s not found in pinger database!' % (mysql_dict[inst]['bind-address']))
-                            to_json[inst] = {'title': inst, 'ip': ip}
+                if check_ro(mysql_dict[inst]['socket']):
+                    select_tmpl = "SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = %s and request like %s;"
+                    result = mysql_execute(cur, mysql_dict[inst], ip_list, select_tmpl, ro=True)
+                else:
+                    select_tmpl = "SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = %s and request like %s;"
+                    result = mysql_execute(cur, mysql_dict[inst], ip_list, select_tmpl, ro=False)
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
-            #print err
+            print err
             exit(1)
 
-    if opts.json_output_enabled:
+    if opts.json_output_enabled and result:
+        to_json = {}
+        for inst in result.values():
+            key = 'mysql-%s-%s' % (inst['db'], inst['ip'])
+            to_json[key] = {'title': inst['db'], 'ip': inst['ip'], 'port': inst['port'], 'ro': inst['ro']}
         print json.dumps(to_json)
-    elif pinger_list:
-        print_list(pinger_list)
+    elif result:
+        for inst in result.values():
+            output("Mysql with ip %s not found in pinger database!" % inst['ip'])
         exit(2)
+
 
 def check_backup(mysql_dict, flag_dict, config_file):
     """ Check if mysql on this host is in backup database """
