@@ -217,6 +217,7 @@ def make_proc_dict(adm_port_list, lookup_dict, int_conf, host='localhost'):
             open_socket(sock, sock_timeout, host, aport)
             args_dict = get_stats(sock, lookup_dict, sock_timeout)
             args_dict['aport'] = aport
+            args_dict['inst_name'] = args_dict['work_dir'].replace("/var/", "")
             sock.close()
 
             filters = {
@@ -227,6 +228,7 @@ def make_proc_dict(adm_port_list, lookup_dict, int_conf, host='localhost'):
                 'recovery_lag': lambda x: int(str(x).rsplit('.')[0]),
                 'recovery_run_crc_lag': lambda x: int(str(x).rsplit('.')[0]),
                 'config': lambda x: x.strip(' "'),
+                'inst_name': lambda x: x.strip(' "'),
                 'primary_port': lambda x: x.strip(' "'),
                 'wal_writer_inbox_size': lambda x: int(str(x).strip(' "'))
             }
@@ -558,7 +560,7 @@ def check_backup(proc_dict, config_file):
                 backup_fail_list.append("Octopus/Tarantool with config %s not found in backup database!" % (proc_dict[instance]['config']))
                 type = 'octopus' if 'octopus' in status else 'tarantool'
                 replica = True if [pattern for pattern in repl_status_list if status.startswith(pattern)] else False
-                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs, 'work_dir': wd, 'replica': replica}
+                to_json[proc_dict[instance]['aport']] = {'title': title, 'type': type, 'snaps': wd_snaps, 'xlogs': wd_xlogs, 'work_dir': wd, 'replica': replica, 'inst_name': proc_dict[instance]['inst_name']}
         except Exception, err:
                 output('MySQL error. Check me.')
                 ### We cant print exeption error here 'cos it can contain auth data
