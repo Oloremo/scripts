@@ -222,7 +222,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
                             tmp_fullpath = tmpdir + root + '/' + file
                             copy_file(fullpath, tmp_fullpath, timeout)
                 logger.info("Making tar for %s as %s" % (xdata_base_dir, tar_name))
-                make_tarfile(tar_name, xdata_base_dir + '/')
+                make_tarfile(tar_name, tmpdir)
                 tars[xdata].append(tar_name)
 
             for xdata in tars.keys():
@@ -243,23 +243,26 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
             rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
 
 ###Logger init
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-mainlog = logging.FileHandler(log_file)
 error_log = logging.FileHandler(error_file + opts.type + '.txt', mode='a')
-
-mainlog.setLevel(loglevel)
 error_log.setLevel(logging.CRITICAL)
-
 format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 eformat = logging.Formatter('%(asctime)s  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-
-mainlog.setFormatter(format)
 error_log.setFormatter(eformat)
-
-logger.addHandler(mainlog)
 logger.addHandler(error_log)
+
+if not os.path.exists("/var/log/mailru"):
+    logger.critical('Path "/var/log/mailru" is not exists - unable to start.')
+    exit(1)
+else:
+    mainlog = logging.FileHandler(log_file)
+    mainlog.setLevel(loglevel)
+    mainlog.setFormatter(format)
+    logger.addHandler(mainlog)
+
 logger.info('=====================================================================================================')
 logger.info('Started')
 logger.info('Backup type is "%s". Mode is "%s"' % (opts.type, opts.mode))
