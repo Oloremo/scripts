@@ -107,23 +107,36 @@ def create_rsync_dirs(inst, hostname, type):
 
     rsync_files(rsync_root, False, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], '', inst['rsync_passwd'], inst['type'])
 
-def rsync_files(root_dir, files, exclude, rsync_args, host, module, module_path, rsync_pass, type):
+def rsync_files(root_dir, files, exclude, rsync_args, host, module, module_path, rsync_pass, type, add_timestamp=False):
 
     rsync = '/usr/bin/rsync'
-    rsync_host = '%s@%s::%s/%s/' % (module, host, module, module_path)
-    if files:
-        rsync_files = ''
-        for file in files:
-            rsync_files += file + ' '
-        rsync_run = '%s %s %s %s' % (rsync, rsync_args, rsync_files, rsync_host)
+    if module_path:
+        rsync_host = '%s@%s::%s/%s/' % (module, host, module, module_path)
     else:
-        rsync_run = '%s %s %s %s' % (rsync, rsync_args, root_dir, rsync_host)
+        rsync_host = '%s@%s::%s/' % (module, host, module)
+
     my_env = os.environ.copy()
     my_env['RSYNC_PASSWORD'] = rsync_pass
-    sp = subprocess.Popen(rsync_run, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, env=my_env)
+
+    if files:
+        for file in files:
+            if add_timestamp:
+                rsync_host += '%s.%s' % (file.split('/')[-1], backup_time)
+                cmdline = '%s %s %s %s' % (rsync, rsync_args, file, rsync_host)
+                rsync_run(cmdline, my_env)
+            else:
+                cmdline = '%s %s %s %s' % (rsync, rsync_args, rsync_files, rsync_host)
+                rsync_run(cmdline, my_env)
+    else:
+        cmdline = '%s %s %s %s' % (rsync, rsync_args, root_dir, rsync_host)
+        rsync_run(cmdline, my_env)
+
+def rsync_run(cmdline, env):
+
+    sp = subprocess.Popen(cmdline, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, env=env)
 
     ### FIXME
-    logger.info("Executing: %s" % rsync_run)
+    logger.info("Executing: %s" % cmdline)
     rsync_output = sp.communicate()
     exitcode = sp.returncode
     logger.debug("Exit code is: %i" % exitcode)
@@ -208,7 +221,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
                 tars[xdata] = []
                 xdata_base_dir = base_dir + '/' + xdata
                 tmpdir = global_tmpdir if global_tmpdir else xdata_base_dir + '/backup_temp'
-                tar_name = '%s/walroot%s_%s.tar' % (tmpdir, xdata, backup_time)
+                tar_name = '%s/walroot%s.tar' % (tmpdir, xdata)
                 if not os.path.exists(tmpdir):
                     os.makedirs(tmpdir)
                 else:
@@ -229,7 +242,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
 
             for xdata in tars.keys():
                 tmpdir = global_tmpdir if global_tmpdir else base_dir + '/' + xdata + '/backup_temp'
-                rsync_files(base_dir, tars[xdata], False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
+                rsync_files(base_dir, tars[xdata], False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'], add_timestamp=True)
                 logger.info("Deleting temp dir: %s" % tmpdir)
                 rmtree(tmpdir)
 
@@ -242,7 +255,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
         elif type == 'other':
             create_rsync_dirs(inst, hostname, type)
             files = inst['optfile_list'].split(',')
-            rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
+            rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'], add_timestamp=True)
 
 ###Logger init
 
