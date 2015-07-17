@@ -85,6 +85,7 @@ def get_conf(config_file, type, hostname):
         cur.execute(select_tmpl, select_data)
         if int(cur.rowcount) is 0:
             logger.warning("Can't find any records in dracula db for hostname '%s' and type '%s'" % (hostname, type))
+            exit(1)
         else:
             return cur.fetchall()
     except Exception:
@@ -92,6 +93,7 @@ def get_conf(config_file, type, hostname):
             exit(1)
 
 def create_rsync_dirs(inst, hostname, type):
+    """ We create needed directory structure and rsync it to bull """
 
     rsync_root = '/tmp/rsync_tmpl/'
     inst_name = inst['base_dir'].split('/')[-1]
@@ -124,7 +126,7 @@ def rsync_files(root_dir, files, exclude, rsync_args, host, module, module_path,
     logger.info("Executing: %s" % rsync_run)
     rsync_output = sp.communicate()
     exitcode = sp.returncode
-    logger.debug("Exitcode is: %i" % exitcode)
+    logger.debug("Exit code is: %i" % exitcode)
     if rsync_output[0] and exitcode is 0:
         for line in rsync_output[0].splitlines():
             logger.debug("%s" % line)
@@ -153,7 +155,7 @@ def lock_file(file, timeout):
 
 def copy_file(path_to_file, tmp_fullpath, timeout):
 
-    logger.info("Copying %s to %s" % (path_to_file, tmp_fullpath))
+    logger.debug("Copying %s to %s" % (path_to_file, tmp_fullpath))
     file = open(path_to_file, 'r')
     if lock_file(file, timeout):
         copyfile(path_to_file, tmp_fullpath)
@@ -168,7 +170,7 @@ def make_tarfile(output_filename, source_dir):
     tar = tarfile.open(output_filename, "w")
     tar.add(source_dir, arcname=os.path.basename(source_dir))
 
-def clenup(inst, type):
+def cleanup(inst, type):
     oldest_snap = sorted(os.listdir(inst['base_dir'] + '/snaps'))[-1] if os.listdir(inst['base_dir'] + '/xlogs') else ''
     oldest_xlog = sorted(os.listdir(inst['base_dir'] + '/xlogs'))[-1] if os.listdir(inst['base_dir'] + '/xlogs') else ''
     oldest_snap_lsn = int(oldest_snap.split('.')[0]) if oldest_snap else 0
@@ -235,7 +237,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
             create_rsync_dirs(inst, hostname, type)
             backupdir = '%s/%s/' % (inst['base_dir'], type)
             rsync_files(backupdir, False, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
-            clenup(inst, type)
+            cleanup(inst, type)
 
         elif type == 'other':
             create_rsync_dirs(inst, hostname, type)
@@ -244,12 +246,13 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
 
 ###Logger init
 
-logger = logging.getLogger(__name__)
+logname = "%s %s" % (opts.type.upper(), opts.mode.upper())
+logger = logging.getLogger(logname)
 logger.setLevel(logging.DEBUG)
 
 error_log = logging.FileHandler(error_file + opts.type + '.txt', mode='a')
 error_log.setLevel(logging.CRITICAL)
-format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+format = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 eformat = logging.Formatter('%(asctime)s  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 error_log.setFormatter(eformat)
 logger.addHandler(error_log)
@@ -265,7 +268,6 @@ else:
 
 logger.info('=====================================================================================================')
 logger.info('Started')
-logger.info('Backup type is "%s". Mode is "%s"' % (opts.type, opts.mode))
 
 ### Hostname
 fqdn = (socket.getfqdn())
