@@ -110,7 +110,7 @@ def create_rsync_dirs(inst, hostname, type):
 def rsync_files(root_dir, files, exclude, rsync_args, host, module, module_path, rsync_pass, type):
 
     rsync = '/usr/bin/rsync'
-    rsync_host = '%s@%s::%s/%s' % (module, host, module, module_path)
+    rsync_host = '%s@%s::%s/%s/' % (module, host, module, module_path)
     if files:
         rsync_files = ''
         for file in files:
