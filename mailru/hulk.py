@@ -32,8 +32,8 @@ parser.add_option("--tmpdir", dest="tmpdir", type="str", default="",
                   help="Config file. Default: /etc/hal9000.conf")
 parser.add_option("--timeout", dest="timeout", type="int", default=5,
                   help="File lock timeout Default: 5")
-parser.add_option("--log", type="str", dest="log_file", default="/var/log/mailru/hulk.log",
-                  help="Path to log file. Default: /var/log/mailru/hulk.log")
+parser.add_option("--log", type="str", dest="log_file",
+                  help="Path to log file. Default: /var/log/mailru/hulk-$type-$mode.log")
 parser.add_option('--log_level', type='choice', action='store', dest='loglevel', default='INFO',
                   choices=['INFO', 'WARNING', 'CRITICAL', 'DEBUG'], help='Log level. Choose from: INFO, WARNING, CRITICAL and DEBUG. Default is INFO')
 
@@ -50,7 +50,6 @@ if not opts.mode:
 ### Global
 now = time()
 backup_time = strftime('%d.%m.%Y_%H%M', localtime())
-log_file = opts.log_file
 error_file = '/var/tmp/hulk-'
 loglevel = logging.getLevelName(opts.loglevel)
 
@@ -95,9 +94,9 @@ def get_conf(config_file, type, hostname):
 def create_rsync_dirs(inst, hostname, type):
     """ We create needed directory structure and rsync it to bull """
 
-    rsync_root = '/tmp/rsync_tmpl/'
+    rsync_root = '/tmp/rsync_tmpl/%s' % type
     inst_name = inst['base_dir'].split('/')[-1]
-    fullpath = '%s%s/%s/%s/%s' % (rsync_root, inst['type'], hostname, inst_name, type)
+    fullpath = '%s/%s/%s/%s/%s' % (rsync_root, inst['type'], hostname, inst_name, type)
     logger.info("Creating backup dir structure: %s" % fullpath)
 
     rmtree(rsync_root, ignore_errors=True)
@@ -265,7 +264,7 @@ logger.setLevel(logging.DEBUG)
 
 error_log = logging.FileHandler(error_file + opts.type + '.txt', mode='a')
 error_log.setLevel(logging.CRITICAL)
-format = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 eformat = logging.Formatter('%(asctime)s  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 error_log.setFormatter(eformat)
 logger.addHandler(error_log)
@@ -274,7 +273,11 @@ if not os.path.exists("/var/log/mailru"):
     logger.critical('Path "/var/log/mailru" is not exists - unable to start.')
     exit(1)
 else:
-    mainlog = logging.FileHandler(log_file)
+    if not opts.log_file:
+        logfile = '/var/log/mailru/hulk-%s-%s.log' % (opts.type, opts.mode)
+        mainlog = logging.FileHandler(logfile)
+    else:
+        mainlog = logging.FileHandler(opts.log_file)
     mainlog.setLevel(loglevel)
     mainlog.setFormatter(format)
     logger.addHandler(mainlog)
