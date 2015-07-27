@@ -94,7 +94,7 @@ def get_conf(config_file, type, hostname):
 def create_rsync_dirs(inst, hostname, type):
     """ We create needed directory structure and rsync it to bull """
 
-    rsync_root = '/tmp/rsync_tmpl/%s' % type
+    rsync_root = '/tmp/rsync_tmpl/%s/' % type
     inst_name = inst['base_dir'].split('/')[-1]
     fullpath = '%s/%s/%s/%s/%s' % (rsync_root, inst['type'], hostname, inst_name, type)
     logger.info("Creating backup dir structure: %s" % fullpath)
