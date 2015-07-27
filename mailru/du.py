@@ -39,7 +39,7 @@ elif opts.type == 'space':
                 opts.warn_limit = False
 
 ### Assign global variables
-fs_type_list = ['ext2', 'ext3', 'ext4', 'xfs']
+fs_type_list = ['ext2', 'ext3', 'ext4', 'xfs', 'tmpfs']
 if opts.fs_type:
     fs_type_list.extend(opts.fs_type)
 ex_list = opts.ex_list
