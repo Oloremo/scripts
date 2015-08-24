@@ -251,7 +251,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
             rsync_files(backupdir, False, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
             cleanup(inst, type)
 
-        elif type == 'other':
+        elif type == 'other' and inst['optfile_list'] != '':
             create_rsync_dirs(inst, hostname, type)
             files = inst['optfile_list'].split(',')
             rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'], add_timestamp=True)
