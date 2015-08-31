@@ -93,7 +93,7 @@ def get_conf(config_file, hostname):
 
     logger.info('Loading config for this host from dracula')
     config = load_config(config_file, 'backup')
-    select_tmpl = "select rsync_modulepath,type,backup_retention,tarantool_snaps_dir,tarantool_xlogs_dir,base_dir,min_size,host from backup.server_backups where rsync_host = %s"
+    select_tmpl = "select rsync_modulepath,type,backup_retention,tarantool_snaps_dir,tarantool_xlogs_dir,base_dir,min_size,host from backup.server_backups where rsync_host = %s and skip_backup = 0"
     select_data = (hostname)
 
     try:
