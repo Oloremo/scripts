@@ -144,11 +144,13 @@ def check_dir(inst, type, mode):
     elif mode == 'silver':
         name = inst['base_dir'].rsplit('/')[-1]
         root = '/backup/' + inst['rsync_modulepath'] + '/' + name + '/' + type + '/'
+    if not os.path.isdir(root):
+        logger.critical("Directory '%s' does not exist" % root)
+        return
     if os.listdir(root):
         oldest_file = max([os.path.join(root, f) for f in os.listdir(root) if not f.startswith('.')], key=os.path.getmtime)
-        if os.lstat(oldest_file).st_mtime < now - limit_ut:
+        if os.lstat(oldest_file).st_ctime < now - limit_ut:
             hours_ago = (now - os.lstat(oldest_file).st_mtime) / 60 // 60
-            logger.info("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
             logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
     else:
         logger.critical("Directory '%s' is empty" % root)
@@ -161,12 +163,10 @@ def check_mysql(inst):
     last_bk = max([os.path.join(root, f) for f in os.listdir(root)], key=os.path.getmtime)
     if os.lstat(last_bk).st_mtime < now - limit_ut:
             hours_ago = (now - os.lstat(last_bk).st_mtime) / 60 // 60
-            logger.info("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
             logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
     if inst['min_size'] != 0:
         last_bk_size = get_size(last_bk) / 1024 // 1024
         if last_bk_size < inst['min_size']:
-            logger.info("Current size of %s is %sMb. Expected more than %sMb." % (last_bk, last_bk_size, inst['min_size']))
             logger.critical("Current size of %s is %sMb. Expected more than %sMb." % (last_bk, last_bk_size, inst['min_size']))
 
 def check(retention_dict):
