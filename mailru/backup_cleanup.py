@@ -11,6 +11,7 @@ from sys import exit
 from os.path import isfile
 from optparse import OptionParser
 from time import time, localtime, strftime
+from shutil import rmtree
 
 ### Gotta catch 'em all!
 usage = "usage: %prog "
@@ -53,8 +54,8 @@ hostname = short + '.i'
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-error_log = logging.FileHandler(error_file, mode='a')
-error_log.setLevel(logging.CRITICAL)
+error_log = logging.FileHandler(error_file, mode='w')
+error_log.setLevel(logging.ERROR)
 format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 eformat = logging.Formatter('%(asctime)s  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 error_log.setFormatter(eformat)
@@ -138,7 +139,13 @@ def cleanup(retention_dict):
                          (fullpath, retention_days, os.lstat(fullpath).st_mtime, now - int(retention_days) * 86400, os.lstat(fullpath).st_mtime < now - int(retention_days) * 86400))
             if os.lstat(fullpath).st_mtime < now - int(retention_days) * 86400:
                 logger.info('Deleting %s, older than %s days ago' % (fullpath, retention_days))
-                os.unlink(fullpath)
+                try:
+                    if inst['type'] == 'mysql':
+                        rmtree(fullpath)
+                    else:
+                        os.unlink(fullpath)
+                except Exception as e:
+                    logger.exception(e)
 
 retention_dict = {}
 retention_dict_tmp = get_conf(opts.config, hostname)
