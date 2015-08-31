@@ -93,7 +93,7 @@ def get_conf(config_file, hostname):
 
     logger.info('Loading config for this host from dracula')
     config = load_config(config_file, 'backup')
-    select_tmpl = "select rsync_modulepath,type,backup_retention,tarantool_snaps_dir,tarantool_xlogs_dir,base_dir,min_size,host from backup.server_backups where rsync_host = %s and skip_backup = 0"
+    select_tmpl = "select * from backup.server_backups where rsync_host = %s and skip_backup = 0"
     select_data = (hostname)
 
     try:
@@ -138,19 +138,28 @@ def get_size(path):
     return total_size
 
 def check_dir(inst, type, mode):
-    limit_ut = 10800 if type == 'xlogs' else 86400
+    if type == 'xlogs':
+        limit_ut = int(inst['xlogs_mon_max_lag']) * 3600
+    elif type == 'snaps':
+        limit_ut = int(inst['snaps_mon_max_lag']) * 3600
+    elif type == 'other':
+        limit_ut = int(inst['other_mon_max_lag']) * 3600
+    else:
+        limit_ut = 86400
+
     if mode == 'tarantool':
         root = '/backup/' + inst['rsync_modulepath'] + '/' + type + '/'
     elif mode == 'silver':
         name = inst['base_dir'].rsplit('/')[-1]
         root = '/backup/' + inst['rsync_modulepath'] + '/' + name + '/' + type + '/'
+
     if not os.path.isdir(root):
         logger.critical("Directory '%s' does not exist" % root)
         return
     if os.listdir(root):
         oldest_file = max([os.path.join(root, f) for f in os.listdir(root) if not f.startswith('.')], key=os.path.getmtime)
-        if os.lstat(oldest_file).st_ctime < now - limit_ut:
-            hours_ago = (now - os.lstat(oldest_file).st_mtime) / 60 // 60
+        if os.lstat(oldest_file).st_mtime < now - limit_ut:
+            hours_ago = int((now - os.lstat(oldest_file).st_mtime) / 60 // 60)
             logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
     else:
         logger.critical("Directory '%s' is empty" % root)
@@ -162,7 +171,7 @@ def check_mysql(inst):
     root = '/backup/' + inst['rsync_modulepath'] + '/' + name
     last_bk = max([os.path.join(root, f) for f in os.listdir(root)], key=os.path.getmtime)
     if os.lstat(last_bk).st_mtime < now - limit_ut:
-            hours_ago = (now - os.lstat(last_bk).st_mtime) / 60 // 60
+            hours_ago = int((now - os.lstat(last_bk).st_mtime) / 60 // 60)
             logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
     if inst['min_size'] != 0:
         last_bk_size = get_size(last_bk) / 1024 // 1024
