@@ -120,8 +120,8 @@ def rsync_files(root_dir, files, exclude, rsync_args, host, module, module_path,
     if files:
         for file in files:
             if add_timestamp:
-                rsync_host += '%s.%s' % (file.split('/')[-1], backup_time)
-                cmdline = '%s %s %s %s' % (rsync, rsync_args, file, rsync_host)
+                filename = '%s.%s' % (file.split('/')[-1], backup_time)
+                cmdline = '%s %s %s %s' % (rsync, rsync_args, file, rsync_host + filename)
                 rsync_run(cmdline, my_env)
             else:
                 cmdline = '%s %s %s %s' % (rsync, rsync_args, rsync_files, rsync_host)
