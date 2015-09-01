@@ -158,9 +158,15 @@ def check_dir(inst, type, mode):
         return
     if os.listdir(root):
         oldest_file = max([os.path.join(root, f) for f in os.listdir(root) if not f.startswith('.')], key=os.path.getmtime)
-        if os.lstat(oldest_file).st_mtime < now - limit_ut:
-            hours_ago = int((now - os.lstat(oldest_file).st_mtime) / 60 // 60)
-            logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
+        ### "Other" backups tend to have same mtime for a long period of time, so we will check their ctime
+        if type == 'other':
+            if os.lstat(oldest_file).st_ctime < now - limit_ut:
+                hours_ago = int((now - os.lstat(oldest_file).st_ctime) / 60 // 60)
+                logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
+        else:
+            if os.lstat(oldest_file).st_mtime < now - limit_ut:
+                hours_ago = int((now - os.lstat(oldest_file).st_mtime) / 60 // 60)
+                logger.critical("Last backup in '%s' was made more than %s hours ago" % (root, hours_ago))
     else:
         logger.critical("Directory '%s' is empty" % root)
 
