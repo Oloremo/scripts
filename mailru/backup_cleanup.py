@@ -140,7 +140,7 @@ def cleanup(retention_dict):
             if os.lstat(fullpath).st_mtime < now - int(retention_days) * 86400:
                 logger.info('Deleting %s, older than %s days ago' % (fullpath, retention_days))
                 try:
-                    if inst['type'] == 'mysql':
+                    if inst['type'] == 'mysql' or inst['type'] == 'psql':
                         rmtree(fullpath)
                     else:
                         os.unlink(fullpath)
