@@ -124,7 +124,7 @@ def make_files_dict(retention_dict):
                     files.append(file)
             retention_dict[inst]['files'] = files
         else:
-            for file in [os.path.join(x[0], y) for x in os.walk(root_dir) for y in x[2]]:
+            for file in [os.path.join(x[0], y) for x in os.walk(root_dir) for y in x[2] if not y.startswith('.')]:
                 files.append(file)
             retention_dict[inst]['files'] = files
 
