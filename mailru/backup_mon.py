@@ -148,10 +148,10 @@ def check_dir(inst, type, mode):
         limit_ut = 86400
 
     if mode == 'tarantool':
-        root = '/backup/' + inst['rsync_modulepath'] + '/' + type + '/'
+        root = '/backup/%s/%s/' % (inst['rsync_modulepath'], type)
     elif mode == 'silver':
         name = inst['base_dir'].rsplit('/')[-1]
-        root = '/backup/' + inst['rsync_modulepath'] + '/' + name + '/' + type + '/'
+        root = '/backup/%s/%s/%s/' % (inst['rsync_modulepath'], name, type)
 
     if not os.path.isdir(root):
         logger.critical("Directory '%s' does not exist" % root)
@@ -186,7 +186,7 @@ def check_mysql(inst):
 
 def check(retention_dict):
 
-    for inst in sorted(retention_dict.values()):
+    for inst in sorted(retention_dict):
         if inst['type'] == 'tarantool':
             if inst['tarantool_snaps_dir']:
                 check_dir(inst, 'snaps', 'tarantool')
@@ -202,10 +202,7 @@ def check(retention_dict):
             check_mysql(inst)
 
 retention_dict = {}
-retention_dict_tmp = get_conf(opts.config, hostname)
-for bk in retention_dict_tmp:
-    name = bk['rsync_modulepath']
-    retention_dict[name] = bk
+retention_dict = get_conf(opts.config, hostname)
 
 check(retention_dict)
 logger.info('Finished')
