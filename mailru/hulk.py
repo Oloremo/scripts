@@ -75,7 +75,7 @@ def get_conf(config_file, type, hostname):
 
     logger.info('Loading config for this host from dracula')
     config = load_config(config_file, 'backup')
-    select_tmpl = "select * from backup.server_backups where host = %s and type = %s and skip_backup = 0"
+    select_tmpl = "select * from backup.server_backups where host = %s and type = %s"
     select_data = (hostname, type)
 
     try:
@@ -210,7 +210,7 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
         inst_name = inst['base_dir'].split('/')[-1]
         module_path = '%s/%s/%s/%s' % (inst['type'], hostname, inst_name, type)
 
-        if type == 'xdata' and inst['type'] == 'silver':
+        if type == 'xdata' and inst['type'] == 'silver' and inst['skip_backup'] == 0:
             base_dir = inst['base_dir'] + '/xdata'
             xdata_dirs = [file for file in os.listdir(base_dir) if isdir(base_dir + '/' + file)]
             tars = {}
@@ -246,18 +246,20 @@ def backup(inst_dict, type, hostname, global_tmpdir, timeout):
                 rmtree(tmpdir)
 
         elif type == 'snaps' or type == 'xlogs':
-            create_rsync_dirs(inst, hostname, type)
-            backupdir = '%s/%s/' % (inst['base_dir'], type)
-            rsync_files(backupdir, False, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
-            cleanup(inst, type)
+            if inst['skip_backup'] == 0:
+                create_rsync_dirs(inst, hostname, type)
+                backupdir = '%s/%s/' % (inst['base_dir'], type)
+                rsync_files(backupdir, False, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'])
+                cleanup(inst, type)
+            else:
+                cleanup(inst, type)
 
-        elif type == 'other' and inst['optfile_list'] != '':
+        elif type == 'other' and inst['optfile_list'] != '' and inst['skip_backup'] == 0:
             create_rsync_dirs(inst, hostname, type)
             files = inst['optfile_list'].split(',')
             rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'], add_timestamp=True)
 
 ###Logger init
-
 logname = "%s %s" % (opts.type.upper(), opts.mode.upper())
 logger = logging.getLogger(logname)
 logger.setLevel(logging.DEBUG)
