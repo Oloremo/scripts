@@ -75,7 +75,7 @@ def get_conf(config_file, type, hostname):
 
     logger.info('Loading config for this host from dracula')
     config = load_config(config_file, 'backup')
-    select_tmpl = "select * from backup.server_backups where host = %s and type= %s"
+    select_tmpl = "select * from backup.server_backups where host = %s and type = %s and skip_backup = 0"
     select_data = (hostname, type)
 
     try:
