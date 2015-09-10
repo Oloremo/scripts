@@ -278,19 +278,23 @@ def add_pinger(config_file, type):
         insert_tmpl = "insert into remote_stor_ping values (%s, %s, '6', %s, '1', %s, NULL, NULL)"
 
         for inst in mysql_dict.values():
-            title = 'mysql-%s-%s:%s' % (inst['title'], inst['ip'], inst['port'])
-            base = cred_dict[inst['title']]['base']
-            user = cred_dict[inst['title']]['user']
-            password = cred_dict[inst['title']]['pass']
-            conn_string = 'dbi:mysql:%s:%s,%s,%s' % (base, inst['ip'], user, password)
-            request = 'select 1' if inst['ro'] else 'update ping_test set val=2;update ping_test set val=1;select 1'
+            if inst['title'] in cred_dict:
+                title = 'mysql-%s-%s:%s' % (inst['title'], inst['ip'], inst['port'])
+                base = cred_dict[inst['title']]['base']
+                user = cred_dict[inst['title']]['user']
+                password = cred_dict[inst['title']]['pass']
+                conn_string = 'dbi:mysql:%s:%s,%s,%s' % (base, inst['ip'], user, password)
+                request = 'select 1' if inst['ro'] else 'update ping_test set val=2;update ping_test set val=1;select 1'
 
-            data_list = [title, inst['ip'], inst['port'], inst['ro']]
-            print_insert_data(names_list, data_list, 'pinger')
+                data_list = [title, inst['ip'], inst['port'], inst['ro']]
+                print_insert_data(names_list, data_list, 'pinger')
 
-            select_data = (conn_string, 'dbi', request)
-            insert_data = (title, 'dbi', request, conn_string)
-            mysql_execute(config, select_tmpl, select_data, insert_tmpl, insert_data)
+                select_data = (conn_string, 'dbi', request)
+                insert_data = (title, 'dbi', request, conn_string)
+                mysql_execute(config, select_tmpl, select_data, insert_tmpl, insert_data)
+            else:
+                print "Cant find credentials for instance '%s'. Check /usr/local/bin/fetch-cred-from-oc.py" % inst['title']
+                continue
 
 if opts.mode == 'pinger':
     add_pinger(opts.config, opts.type)
