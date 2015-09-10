@@ -184,12 +184,13 @@ def add_backup(config_file, type, skip_backup=0, backup_retention=14, machine_re
             wd = bk_dict[inst]['work_dir'].strip('" ')
             wd_snaps = wd + '/snaps'
             wd_snaps_orig = readlink(wd_snaps) if islink(wd_snaps) else wd_snaps
+            wd_name = bk_dict[inst]['work_dir'].rsplit('/')[-1]
 
             if not bk_dict[inst]['replica']:
                 skip_backup = 0
                 insert_tmpl = "insert into backup.server_backups (host, type, rsync_host, rsync_modulepath, backup_retention, machine_retention, gzip_period, tarantool_snaps_dir, tarantool_xlogs_dir, skip_backup, optfile_list) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '')"
                 names_list = ['hostname', 'rsync_host', 'type', 'module', 'snaps_dir', 'xlogs_dir', 'backup_retention', 'machine_retention', 'skip_backup']
-                rsync_module = 'my_backup/%s/%s/%s' % (bk_dict[inst]['type'], short, bk_dict[inst]['inst_name'])
+                rsync_module = 'my_backup/%s/%s/%s' % (bk_dict[inst]['type'], short, wd_name)
                 rsync_host = get_bull()
 
                 data_list = [hostname, rsync_host, bk_type, rsync_module, bk_dict[inst]['snaps'], bk_dict[inst]['xlogs'], backup_retention, machine_retention, skip_backup]
