@@ -303,6 +303,8 @@ def check_pinger(mysql_dict, flag_dict, config_file):
             key = 'mysql-%s-%s' % (inst['db'], inst['ip'])
             to_json[key] = {'title': inst['db'], 'ip': inst['ip'], 'port': inst['port'], 'ro': inst['ro']}
         print json.dumps(to_json)
+    elif opts.json_output_enabled and not result:
+        print json.dumps({})
     elif result:
         for inst in result.values():
             output("Mysql with ip %s not found in pinger database!" % inst['ip'])
