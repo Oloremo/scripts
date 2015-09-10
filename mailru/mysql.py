@@ -260,12 +260,14 @@ def mysql_execute(cur, mysql_dict, ip_list, select_tmpl, ro):
             sql_ip_like = '%' + ip + '%'
             select_data = (sql_ip_like, 'dbi', 'select 1') if ro else (sql_ip_like, 'dbi', '%update ping_test%')
             cur.execute(select_tmpl, select_data)
-            ip_count_dict[ip] = {'row_count': int(cur.rowcount), 'ip': ip, 'port': mysql_dict['port'], 'db': mysql_dict['db'], 'ro': ro}
+            if int(cur.rowcount) is 0:
+                ip_count_dict[ip] = {'row_count': int(cur.rowcount), 'ip': ip, 'port': mysql_dict['port'], 'db': mysql_dict['db'], 'ro': ro}
     else:
         sql_ip_like = '%' + mysql_dict['bind-address'] + '%'
         select_data = (sql_ip_like, 'dbi', 'select 1') if ro else (sql_ip_like, 'dbi', '%update ping_test%')
         cur.execute(select_tmpl, select_data)
-        ip_count_dict[mysql_dict['bind-address']] = {'row_count': int(cur.rowcount), 'ip': mysql_dict['bind-address'], 'port': mysql_dict['port'], 'db': mysql_dict['db'], 'ro': ro}
+        if int(cur.rowcount) is 0:
+            ip_count_dict[mysql_dict['bind-address']] = {'row_count': int(cur.rowcount), 'ip': mysql_dict['bind-address'], 'port': mysql_dict['port'], 'db': mysql_dict['db'], 'ro': ro}
 
     return ip_count_dict
 
