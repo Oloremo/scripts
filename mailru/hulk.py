@@ -186,22 +186,28 @@ def cleanup(inst, type):
     oldest_snap = sorted(os.listdir(inst['base_dir'] + '/snaps'))[-1] if os.listdir(inst['base_dir'] + '/xlogs') else ''
     oldest_xlog = sorted(os.listdir(inst['base_dir'] + '/xlogs'))[-1] if os.listdir(inst['base_dir'] + '/xlogs') else ''
     oldest_snap_lsn = int(oldest_snap.split('.')[0]) if oldest_snap else 0
-    limit = inst['machine_retention'] if int(inst['machine_retention']) > 0 else 1
-    limit_ut = limit * 86400
+    if inst['machine_retention_hours']:
+        limit = inst['machine_retention_hours']
+        limit_ut = limit * 3600
+        time_type = 'hours'
+    else:
+        limit = inst['machine_retention'] if int(inst['machine_retention']) > 0 else 1
+        limit_ut = limit * 86400
+        time_type = 'days'
 
     if type == 'snaps':
         base_dir = inst['base_dir'] + '/' + type
         for file in [file for file in os.listdir(base_dir) if file != oldest_snap]:
             fullpath = base_dir + '/' + file
             if os.lstat(fullpath).st_mtime < now - limit_ut:
-                logger.info('Deleting %s, older than %s days' % (fullpath, limit))
+                logger.info('Deleting %s, older than %s %s' % (fullpath, limit, time_type))
                 os.unlink(fullpath)
     if type == 'xlogs':
         base_dir = inst['base_dir'] + '/' + type
         for file in [file for file in os.listdir(base_dir) if int(file.split('.')[0]) < oldest_snap_lsn and file != oldest_xlog]:
             fullpath = base_dir + '/' + file
             if os.lstat(fullpath).st_mtime < now - limit_ut:
-                logger.info('Deleting %s, older than %s days' % (fullpath, limit))
+                logger.info('Deleting %s, older than %s %s' % (fullpath, limit, time_type))
                 os.unlink(fullpath)
 
 def backup(inst_dict, type, hostname, global_tmpdir, timeout):
