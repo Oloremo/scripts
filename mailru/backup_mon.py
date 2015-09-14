@@ -197,6 +197,7 @@ def check(retention_dict):
                 check_dir(inst, 'xdata', 'silver')
                 check_dir(inst, 'snaps', 'silver')
                 check_dir(inst, 'xlogs', 'silver')
+            if inst['base_dir'] and inst['optfile_list']:
                 check_dir(inst, 'other', 'silver')
         if inst['type'] == 'mysql':
             check_mysql(inst)
