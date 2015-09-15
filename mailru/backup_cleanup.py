@@ -110,6 +110,14 @@ def get_conf(config_file, hostname):
             logger.exception('MySQL error. Check me.')
             exit(1)
 
+def oldest_file(root):
+
+    return max([os.path.join(root, f) for f in os.listdir(root) if not f.startswith('.')], key=os.path.getmtime)
+
+def oldest_dir(root):
+
+    return max([os.path.join(root, d) for d in os.listdir(root)], key=os.path.getmtime)
+
 def make_files_dict(retention_dict):
 
     ### Mysql root directory pattern
@@ -119,12 +127,12 @@ def make_files_dict(retention_dict):
         files = []
         root_dir = "%s/%s" % (basedir, retention_dict[inst]['rsync_modulepath'])
         if retention_dict[inst]['type'] == 'mysql' or retention_dict[inst]['type'] == 'psql':
-            for file in [x[0] for x in os.walk(root_dir)]:
-                if p.findall(file):
+            for file in [x[0] for x in os.walk(root_dir) if p.findall(x[0])]:
+                if file not in oldest_file(os.path.dirname(file)):
                     files.append(file)
             retention_dict[inst]['files'] = files
         else:
-            for file in [os.path.join(x[0], y) for x in os.walk(root_dir) for y in x[2] if not y.startswith('.')]:
+            for file in [os.path.join(x[0], y) for x in os.walk(root_dir) for y in x[2] if not y.startswith('.') and y not in oldest_file(x[0])]:
                 files.append(file)
             retention_dict[inst]['files'] = files
 
