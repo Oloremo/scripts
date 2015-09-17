@@ -31,8 +31,8 @@ parser.add_option("--conf", dest="config", type="str", default="/etc/hal9000.con
                   help="Config file. Default: /etc/hal9000.conf")
 parser.add_option("--tmpdir", dest="tmpdir", type="str", default="",
                   help="Config file. Default: /etc/hal9000.conf")
-parser.add_option("--timeout", dest="timeout", type="int", default=5,
-                  help="File lock timeout Default: 5")
+parser.add_option("--timeout", dest="timeout", type="int", default=10,
+                  help="File lock timeout Default: 10")
 parser.add_option("--log", type="str", dest="log_file",
                   help="Path to log file. Default: /var/log/mailru/hulk-$type-$mode.log")
 parser.add_option('--log_level', type='choice', action='store', dest='loglevel', default='INFO',
@@ -57,6 +57,7 @@ loglevel = logging.getLevelName(opts.loglevel)
 
 def sig_handler(signum=None, frame=None):
     logger.critical('Caught signal "%s"' % signum)
+    logger.warning('Caught signal "%s"' % signum)
     exit(0)
 
 def load_config(file, type):
@@ -72,6 +73,7 @@ def load_config(file, type):
             logger.critical('Cant load "%s" key from config %s' % (type, file))
             exit(2)
     except Exception:
+        logger.critical('Unhandled exeption while loading "%s". Check logs.' % file)
         logger.exception('Unhandled exeption. Check me.')
         exit(1)
 
@@ -93,6 +95,7 @@ def get_conf(config_file, type, hostname):
         else:
             return cur.fetchall()
     except Exception:
+            logger.critical('Unhandled exeption while connecting to mysql. Check logs.')
             logger.exception('MySQL error. Check me.')
             exit(1)
 
@@ -179,8 +182,8 @@ def copy_file(path_to_file, tmp_fullpath, timeout):
         fcntl.flock(file, fcntl.LOCK_UN)
         file.close()
     else:
-        logger.warning("Cant' acquire lock for %s seconds, giving up!" % timeout)
-        logger.critical("Cant' acquire lock for %s seconds, giving up!" % timeout)
+        logger.warning("Can't acquire lock for %s seconds, file '%s' giving up!" % (timeout, file))
+        logger.critical("Can't acquire lock for %s seconds, file '%s' giving up!" % (timeout, file))
         file.close()
 
 def make_tarfile(output_filename, source_dir):
@@ -236,12 +239,14 @@ def backup(inst_dict, mode, hostname, global_tmpdir, timeout):
                     if not os.path.exists(tmpdir):
                         os.makedirs(tmpdir)
                     else:
+                        logger.info("Found old temp dir: %s, deleting" % tmpdir)
                         rmtree(tmpdir)
                         os.makedirs(tmpdir)
                     for root, dirs, files in os.walk(xdata_base_dir, followlinks=True):
                         if 'backup_temp' not in root and xdata_base_dir != root:
                             os.makedirs(tmpdir + root)
                         if root and 'backup_temp' not in root and xdata_base_dir != root:
+                            logger.info("Copying files to temp dir from '%s'" % xdata_base_dir)
                             for file in files:
                                 fullpath = root + '/' + file
                                 tmp_fullpath = tmpdir + root + '/' + file
@@ -269,9 +274,9 @@ def backup(inst_dict, mode, hostname, global_tmpdir, timeout):
                 create_rsync_dirs(inst, hostname, mode)
                 files = inst['optfile_list'].split(',')
                 rsync_files(False, files, False, inst['rsync_opts'], inst['rsync_host'], inst['rsync_login'], module_path, inst['rsync_passwd'], inst['type'], add_timestamp=True)
-        except Exception as e:
-            logger.critical('Error occured. Type was: "%s", mode was "%s"') % (inst['type'], mode)
-            logger.exception(e)
+        except Exception:
+            logger.critical('Error occured. Type was: "%s", mode was "%s". Check logs.' % (inst['type'], mode))
+            logger.exception('Caught exeception in main loop.')
 
 ###Logger init
 logname = "%s %s" % (opts.type.upper(), opts.mode.upper())
