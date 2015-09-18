@@ -182,8 +182,8 @@ def copy_file(path_to_file, tmp_fullpath, timeout):
         fcntl.flock(file, fcntl.LOCK_UN)
         file.close()
     else:
-        logger.warning("Can't acquire lock for %s seconds, file '%s' giving up!" % (timeout, file))
-        logger.critical("Can't acquire lock for %s seconds, file '%s' giving up!" % (timeout, file))
+        logger.warning("Can't acquire lock for %s seconds, file '%s' giving up!" % (timeout, path_to_file))
+        logger.critical("Can't acquire lock for %s seconds, file '%s' giving up!" % (timeout, path_to_file))
         file.close()
 
 def make_tarfile(output_filename, source_dir):
@@ -246,11 +246,12 @@ def backup(inst_dict, mode, hostname, global_tmpdir, timeout):
                         if 'backup_temp' not in root and xdata_base_dir != root:
                             os.makedirs(tmpdir + root)
                         if root and 'backup_temp' not in root and xdata_base_dir != root:
-                            logger.info("Copying files to temp dir from '%s'" % xdata_base_dir)
+                            logger.info("Copying files to temp dir from '%s'" % root)
                             for file in files:
-                                fullpath = root + '/' + file
-                                tmp_fullpath = tmpdir + root + '/' + file
-                                copy_file(fullpath, tmp_fullpath, timeout)
+                                if not file.edswith('.tmp'):
+                                    fullpath = root + '/' + file
+                                    tmp_fullpath = tmpdir + root + '/' + file
+                                    copy_file(fullpath, tmp_fullpath, timeout)
                     logger.info("Making tar for %s as %s" % (xdata_base_dir, tar_name))
                     make_tarfile(tar_name, tmpdir)
                     tars[xdata].append(tar_name)
