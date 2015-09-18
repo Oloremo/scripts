@@ -57,7 +57,6 @@ loglevel = logging.getLevelName(opts.loglevel)
 
 def sig_handler(signum=None, frame=None):
     logger.critical('Caught signal "%s"' % signum)
-    logger.warning('Caught signal "%s"' % signum)
     exit(0)
 
 def load_config(file, type):
@@ -248,7 +247,7 @@ def backup(inst_dict, mode, hostname, global_tmpdir, timeout):
                         if root and 'backup_temp' not in root and xdata_base_dir != root:
                             logger.info("Copying files to temp dir from '%s'" % root)
                             for file in files:
-                                if not file.edswith('.tmp'):
+                                if not file.endswith('.tmp'):
                                     fullpath = root + '/' + file
                                     tmp_fullpath = tmpdir + root + '/' + file
                                     copy_file(fullpath, tmp_fullpath, timeout)
@@ -278,6 +277,7 @@ def backup(inst_dict, mode, hostname, global_tmpdir, timeout):
         except Exception:
             logger.critical('Error occured. Type was: "%s", mode was "%s". Check logs.' % (inst['type'], mode))
             logger.exception('Caught exeception in main loop.')
+            exit(1)
 
 ###Logger init
 logname = "%s %s" % (opts.type.upper(), opts.mode.upper())
