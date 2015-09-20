@@ -143,17 +143,24 @@ def cleanup(retention_dict):
     for inst in retention_dict.values():
         retention_days = 1 if inst['backup_retention'] == 0 else inst['backup_retention']
         for fullpath in inst['files']:
-            logger.debug('File: "%s", retention_days: "%s" -- Checking mtime < retention_time: %s < %s, result: %s' %
-                         (fullpath, retention_days, os.lstat(fullpath).st_ctime, now - int(retention_days) * 86400, os.lstat(fullpath).st_ctime < now - int(retention_days) * 86400))
-            if os.lstat(fullpath).st_ctime < now - int(retention_days) * 86400:
+            if '/other/' in fullpath:
+                time_type = 'ctime'
+                fullpath_ut = os.lstat(fullpath).st_ctime
+            else:
+                time_type = 'mtime'
+                fullpath_ut = os.lstat(fullpath).st_mtime
+
+            logger.debug('File: "%s", retention_days: "%s" -- Checking %s < retention_time: %s < %s, result: %s' %
+                         (fullpath, retention_days, time_type, fullpath_ut, now - int(retention_days) * 86400, fullpath_ut < now - int(retention_days) * 86400))
+            if fullpath_ut < now - int(retention_days) * 86400:
                 logger.info('Deleting %s, older than %s days ago' % (fullpath, retention_days))
                 try:
                     if inst['type'] == 'mysql' or inst['type'] == 'psql':
                         rmtree(fullpath)
                     else:
                         os.unlink(fullpath)
-                except Exception as e:
-                    logger.exception(e)
+                except Exception:
+                    logger.exception('Error occured during deleting a file. File was: %s' % fullpath)
 
 retention_dict = {}
 retention_dict_tmp = get_conf(opts.config, hostname)
