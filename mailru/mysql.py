@@ -285,12 +285,11 @@ def check_pinger(mysql_dict, flag_dict, config_file):
         cur = db.cursor()
         for inst in mysql_dict.keys():
             if check_backup_flag(flag_dict[inst]['file'], flag_dict[inst]['flag'], flag_dict[inst]['stale']):
-                if check_ro(mysql_dict[inst]['socket']):
-                    select_tmpl = "SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = %s and request like %s;"
-                    result = mysql_execute(cur, mysql_dict[inst], ip_list, select_tmpl, ro=True)
-                else:
-                    select_tmpl = "SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = %s and request like %s;"
-                    result = mysql_execute(cur, mysql_dict[inst], ip_list, select_tmpl, ro=False)
+                select_tmpl = "SELECT * FROM remote_stor_ping WHERE connect_str like %s and typ = %s and request like %s;"
+                ro = True if check_ro(mysql_dict[inst]['socket']) else False
+                result = mysql_execute(cur, mysql_dict[inst], ip_list, select_tmpl, ro)
+            else:
+                exit(0)
     except Exception, err:
             output('MySQL error. Check me.')
             ### We cant print exeption error here 'cos it can contain auth data
